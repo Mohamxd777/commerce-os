@@ -21,6 +21,16 @@ const navigationGroups = [
       ['Goods Receipts', '#goods-receipts'],
     ],
   },
+  {
+    label: 'Inventory',
+    items: [
+      ['Overview', '#inventory'],
+      ['Stock', '#inventory/stock'],
+      ['Movements', '#inventory/movements'],
+      ['Transfers', '#inventory/transfers'],
+      ['Reorder Rules', '#inventory/reorder-rules'],
+    ],
+  },
 ];
 
 export default function AppLayout({
@@ -43,7 +53,8 @@ export default function AppLayout({
               <ul>
                 {group.items.map(([label, href]) => {
                   const route = href.slice(1);
-                  const active = activeRoute === route || activeRoute.startsWith(route + '/');
+                  const active = activeRoute === route
+                    || (route !== 'inventory' && activeRoute.startsWith(route + '/'));
                   return (
                     <li key={label}>
                       <a className={active ? 'active' : ''} href={href}>
@@ -64,7 +75,7 @@ export default function AppLayout({
       <div className="page">
         <header className="topbar" id="top">
           <div><span className="mobile-brand">Commerce OS</span></div>
-          <div className="environment"><span />Catalog &amp; purchasing</div>
+          <div className="environment"><span />Catalog, purchasing &amp; inventory</div>
         </header>
         <main>{children}</main>
       </div>

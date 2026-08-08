@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRouter } from './authRoutes.js';
 import { brandRouter, categoryRouter, productRouter, skuRouter } from './catalogRoutes.js';
 import { purchasingRouter } from './purchasingRoutes.js';
+import { inventoryRouter } from './inventoryRoutes.js';
 
 export const apiRouter = Router();
 
@@ -37,3 +38,4 @@ apiRouter.use('/categories', categoryRouter);
 apiRouter.use('/products', productRouter);
 apiRouter.use('/skus', skuRouter);
 apiRouter.use(purchasingRouter);
+apiRouter.use(inventoryRouter);

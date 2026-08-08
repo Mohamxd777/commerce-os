@@ -40,7 +40,8 @@ export async function listGoodsReceipts(
     `SELECT receipt.id, receipt.organization_id, receipt.purchase_order_id,
             receipt.receipt_number, receipt.received_date,
             receipt.location_id, receipt.notes, receipt.received_by,
-            receipt.created_at, purchase_order.po_number,
+            receipt.created_at, receipt.inventory_posted_at, receipt.inventory_posted_by,
+            purchase_order.po_number,
             supplier.name AS supplier_name, location.name AS location_name,
             (
               SELECT COUNT(*)::int
@@ -73,7 +74,8 @@ export async function findGoodsReceiptById(database, { organizationId, id }) {
     `SELECT receipt.id, receipt.organization_id, receipt.purchase_order_id,
             receipt.receipt_number, receipt.received_date,
             receipt.location_id, receipt.notes, receipt.received_by,
-            receipt.created_at, purchase_order.po_number,
+            receipt.created_at, receipt.inventory_posted_at, receipt.inventory_posted_by,
+            purchase_order.po_number,
             purchase_order.status AS purchase_order_status,
             supplier.name AS supplier_name, location.name AS location_name,
             receiver.display_name AS received_by_name
@@ -130,6 +132,7 @@ export async function listReceiptsForPurchaseOrder(
   const result = await database.query(
     `SELECT receipt.id, receipt.receipt_number, receipt.received_date,
             receipt.location_id, receipt.notes, receipt.created_at,
+            receipt.inventory_posted_at, receipt.inventory_posted_by,
             location.name AS location_name,
             receiver.display_name AS received_by_name,
             COALESCE(SUM(item.quantity_received), 0)::numeric AS accepted_quantity,

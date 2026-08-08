@@ -1,8 +1,8 @@
 # Commerce OS
 
-Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog. Task 3 adds suppliers, supplier-specific SKU offers and price history, purchase orders, controlled approval/ordering states, and partial goods receiving.
+Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog. Task 3 adds suppliers and purchasing. Task 4 adds an immutable inventory ledger, transactional stock projections, explicit receipt posting, transfers, adjustments, bucket control, reorder planning, and reconciliation.
 
-Inventory ledger movements, sales, accounting, landed-cost allocation, marketplace integrations, and physical serial-number instances remain intentionally deferred.
+Sales, accounting, inventory valuation, landed-cost allocation, marketplace integrations, and physical serial-number instances remain intentionally deferred.
 
 ## Technology
 
@@ -155,7 +155,7 @@ Supplier → Purchase Order → PO Item → Goods Receipt Item
 
 Supplier products hold current cost, currency, MOQ, lead time, and preference. Price changes preserve append-only effective history. PO items copy the agreed cost so later supplier-price changes cannot rewrite an order.
 
-Purchase-order totals are calculated server-side with PostgreSQL `NUMERIC`. Controlled actions move a PO from draft to approved, ordered, partially received, and received. Goods receipts preserve accepted and rejected quantities but do not create inventory ledger movements in Task 3.
+Purchase-order totals are calculated server-side with PostgreSQL `NUMERIC`. Controlled actions move a PO from draft to approved, ordered, partially received, and received. Goods receipts preserve accepted and rejected quantities. Task 4 adds a separate idempotent action that posts only accepted quantities.
 
 Key authenticated endpoints include:
 
@@ -168,6 +168,22 @@ Key authenticated endpoints include:
 - `GET /api/purchasing-summary`
 
 See [`docs/purchasing.md`](docs/purchasing.md) for the data model, financial rules, workflow, partial receiving, permissions, and full endpoint table.
+
+## Inventory ledger and stock control
+
+Task 4 keeps the movement ledger authoritative:
+
+```text
+Accepted Goods Receipt → PURCHASE_RECEIPT → transactional balance projection
+Draft Transfer → TRANSFER_OUT at shipment → in transit → TRANSFER_IN at receipt
+Physical correction or bucket change → audited adjustment movements
+```
+
+Stock is separated into `available`, `reserved`, `quarantine`, and `damaged` buckets. Available stock cannot become negative. Duplicate receipt and transfer requests are protected by database idempotency, and the projection can be reconciled against ledger sums at any time.
+
+The React Inventory navigation provides Overview, Stock, Movements, Transfers, and Reorder Rules. Key API routes begin at `/api/inventory`; accepted receipts post through `POST /api/goods-receipts/:id/post-inventory`.
+
+See [`docs/inventory.md`](docs/inventory.md) for sign conventions, movement types, buckets, locking, transfers, adjustments, idempotency, reconciliation, permissions, the full API, and deferred serial-instance design.
 
 ### Create the first owner
 
@@ -203,7 +219,7 @@ npm run test
 npm run build
 ```
 
-Current tests cover the reusable BusinessTerm tooltips, SKU and product forms, supplier and PO forms, receiving UI, API health/errors, password hashing, catalog transactions, supplier duplicate protection, supplier-SKU linking, MOQ, price history, comparison, authoritative PO totals, status transitions, permissions, partial/multiple receipts, rejection tracking, over-receipt protection, organization isolation, pagination, and archival behavior.
+Current tests cover reusable business terms, catalog and purchasing workflows, receipt evidence, ledger posting idempotency, rejected-quantity exclusion, adjustment and bucket movements, negative-stock rollback, transfer retries, concurrent stock consumption, reorder rules, low-stock detection, organization isolation, permissions, direct-write protection, and ledger/projection reconciliation.
 
 ## Project structure
 

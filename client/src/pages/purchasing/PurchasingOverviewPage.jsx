@@ -36,7 +36,7 @@ export default function PurchasingOverviewPage({ organizationId }) {
       <PageHeader
         eyebrow="Purchasing"
         title="Purchasing control center"
-        description="Monitor suppliers, open commitments, expected deliveries, and receiving progress without changing inventory."
+        description="Monitor suppliers, open commitments, expected deliveries, receiving progress, and controlled inventory posting."
         action={<a className="primary-button" href="#purchase-orders/new">Create purchase order</a>}
       />
       <div className="summary-grid">
@@ -49,8 +49,8 @@ export default function PurchasingOverviewPage({ organizationId }) {
         ))}
       </div>
       <section className="purchasing-callout">
-        <div><p className="eyebrow">Workflow boundary</p><h2>Receipts preserve evidence; inventory comes next.</h2></div>
-        <p>Task 3 records exactly what was accepted or rejected at each location. Task 4 can reference those immutable receipt items when posting ledger movements.</p>
+        <div><p className="eyebrow">Workflow boundary</p><h2>Receipt evidence posts to the ledger explicitly.</h2></div>
+        <p>Accepted quantities can create idempotent PURCHASE_RECEIPT movements. Rejected quantities remain receipt evidence and never become available stock.</p>
       </section>
     </>
   );

@@ -103,13 +103,13 @@ Receiving is transactional. The service locks the PO and its lines, sums previou
 
 Receiving 60 accepted units from an order of 100 produces `partially_received`. Receiving the remaining 40 produces `received`. Rejected quantities remain separate and do not satisfy the order.
 
-Receipts are not edited or deleted through the API.
+Receipts are not edited or deleted through the API. Task 4 can explicitly post accepted quantities through `POST /api/goods-receipts/:id/post-inventory`; rejected quantities never enter available stock.
 
-## Why receipts do not change inventory yet
+## Receipt evidence and controlled inventory posting
 
-Task 3 proves what arrived but does not know the full inventory-ledger rules from Task 4. Directly editing an on-hand number now would lose source, reversal, serial, valuation, and audit information.
+Receipt creation proves what arrived but does not automatically change stock. Directly editing an on-hand number would lose source, reversal, serial, valuation, and audit information.
 
-Each `goods_receipt_items.id` is stable evidence containing accepted quantity, SKU, PO line, organization, receipt, and location context. Task 4 can create ledger movements referencing those receipt-item IDs and enforce one posting per source item.
+Each `goods_receipt_items.id` is stable evidence containing accepted quantity, SKU, PO line, organization, receipt, and location context. Task 4 creates an idempotent `PURCHASE_RECEIPT` movement for each positive accepted item after an explicit review action. Existing receipts are never blindly backfilled. See `docs/inventory.md`.
 
 ## Organization isolation and permissions
 

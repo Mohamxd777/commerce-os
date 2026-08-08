@@ -45,7 +45,7 @@ export default function SkusPage({ organizationId }) {
                 <td><a className="table-link" href={'#products/' + sku.product_id}>{sku.product_name}</a><small>{sku.variant_name}</small></td>
                 <td>{sku.barcode_count}</td>
                 <td><button className="text-button" onClick={() => toggle(sku, 'serialTrackingEnabled')}>{sku.serial_tracking_enabled ? 'Required' : 'Not required'}</button></td>
-                <td><a className="table-link" href={'#skus/' + sku.id + '/suppliers'}>Compare suppliers</a></td>
+                <td><a className="table-link" href={'#inventory/skus/' + sku.id}>View inventory</a><small><a className="table-link" href={'#skus/' + sku.id + '/suppliers'}>Compare suppliers</a></small></td>
                 <td><button className="text-button" onClick={() => toggle(sku, 'isActive')}>{sku.is_active ? 'Active' : 'Archived'}</button></td>
               </tr>
             ))}</tbody>

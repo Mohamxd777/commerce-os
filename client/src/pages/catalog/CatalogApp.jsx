@@ -21,6 +21,15 @@ import SupplierComparisonPage from '../purchasing/SupplierComparisonPage.jsx';
 import SupplierDetailPage from '../purchasing/SupplierDetailPage.jsx';
 import SupplierFormPage from '../purchasing/SupplierFormPage.jsx';
 import SuppliersPage from '../purchasing/SuppliersPage.jsx';
+import InventoryAdjustmentPage from '../inventory/InventoryAdjustmentPage.jsx';
+import InventoryMovementsPage from '../inventory/InventoryMovementsPage.jsx';
+import InventoryOverviewPage from '../inventory/InventoryOverviewPage.jsx';
+import InventoryReorderRulesPage from '../inventory/InventoryReorderRulesPage.jsx';
+import InventoryStockPage from '../inventory/InventoryStockPage.jsx';
+import InventoryTransferDetailPage from '../inventory/InventoryTransferDetailPage.jsx';
+import InventoryTransferFormPage from '../inventory/InventoryTransferFormPage.jsx';
+import InventoryTransfersPage from '../inventory/InventoryTransfersPage.jsx';
+import SkuInventoryDetailPage from '../inventory/SkuInventoryDetailPage.jsx';
 
 function useHashRoute() {
   const readRoute = () => window.location.hash.slice(1) || 'overview';
@@ -188,6 +197,17 @@ export default function CatalogApp() {
   } else if (route === 'goods-receipts') page = <GoodsReceiptsPage organizationId={organizationId} />;
   else if (/^goods-receipts\/[^/]+$/.test(route)) {
     page = <GoodsReceiptDetailPage organizationId={organizationId} receiptId={route.split('/')[1]} />;
+  } else if (route === 'inventory') page = <InventoryOverviewPage organizationId={organizationId} />;
+  else if (route === 'inventory/stock') page = <InventoryStockPage organizationId={organizationId} />;
+  else if (route === 'inventory/movements') page = <InventoryMovementsPage organizationId={organizationId} />;
+  else if (route === 'inventory/adjustments/new') page = <InventoryAdjustmentPage organizationId={organizationId} />;
+  else if (route === 'inventory/transfers') page = <InventoryTransfersPage organizationId={organizationId} />;
+  else if (route === 'inventory/transfers/new') page = <InventoryTransferFormPage organizationId={organizationId} />;
+  else if (/^inventory\/transfers\/[^/]+$/.test(route)) {
+    page = <InventoryTransferDetailPage organizationId={organizationId} transferId={route.split('/')[2]} />;
+  } else if (route === 'inventory/reorder-rules') page = <InventoryReorderRulesPage organizationId={organizationId} />;
+  else if (/^inventory\/skus\/[^/]+$/.test(route)) {
+    page = <SkuInventoryDetailPage organizationId={organizationId} skuId={route.split('/')[2]} />;
   }
 
   return (

@@ -1,0 +1,26 @@
+import { useEffect, useState } from 'react';
+import { inventoryApi } from '../../api/inventoryApi.js';
+import BusinessTerm from '../../components/BusinessTerm.jsx';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/catalog/CatalogStates.jsx';
+import { inventoryTerms, quantity } from '../../components/inventory/InventoryTerms.js';
+
+export default function SkuInventoryDetailPage({ organizationId, skuId }) {
+  const [inventory, setInventory] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => { inventoryApi.getSkuInventory(organizationId, skuId).then((result) => setInventory(result.data)).catch(setError); }, [organizationId, skuId]);
+  if (error) return <ErrorState error={error} />;
+  if (!inventory) return <LoadingState label="Loading SKU inventory…" />;
+  return (
+    <>
+      <PageHeader eyebrow="SKU inventory" title={inventory.sku_code} description={`${inventory.product_name} · ${inventory.variant_name}`} action={<a className="secondary-button" href={'#products/' + inventory.product_id}>Open product</a>} />
+      {inventory.serialTrackingNote && <div className="immutable-note serial-foundation-note"><strong>Serial tracking foundation</strong><span>{inventory.serialTrackingNote}</span></div>}
+      <div className="detail-grid">
+        <section className="detail-card span-two"><div className="detail-card-heading"><h2>Stock by location</h2><span>{inventory.balances.length}</span></div>{inventory.balances.length === 0 ? <EmptyState title="No stock" message="No balance or planning row exists for this SKU." /> : <div className="catalog-table-wrap embedded-table"><table className="catalog-table"><thead><tr><th>Location</th><th><BusinessTerm term="Available" explanation={inventoryTerms['Available Stock']} /></th><th>Reserved</th><th>Quarantine</th><th>Damaged</th><th>Total</th></tr></thead><tbody>{inventory.balances.map((balance) => <tr key={balance.location_id}><td>{balance.location_name}<small>{balance.location_code}</small></td><td>{quantity(balance.available)}</td><td>{quantity(balance.reserved)}</td><td>{quantity(balance.quarantine)}</td><td>{quantity(balance.damaged)}</td><td>{quantity(Number(balance.available) + Number(balance.reserved) + Number(balance.quarantine) + Number(balance.damaged))}</td></tr>)}</tbody></table></div>}</section>
+        <section className="detail-card"><div className="detail-card-heading"><h2>Reorder rules</h2><a className="text-button" href="#inventory/reorder-rules">Manage</a></div>{inventory.reorderRules.length === 0 ? <p className="form-note">No reorder rule configured.</p> : <div className="history-list">{inventory.reorderRules.map((rule) => <article key={rule.id}><div><strong>{rule.location_name}</strong><span>Available {quantity(rule.available)}</span></div><div><strong>ROP {quantity(rule.reorder_point)}</strong><span>Safety {quantity(rule.safety_stock)} · Target {rule.target_stock == null ? '—' : quantity(rule.target_stock)}</span></div></article>)}</div>}</section>
+        <section className="detail-card"><div className="detail-card-heading"><h2>Suppliers</h2></div>{inventory.suppliers.length === 0 ? <p className="form-note">No active supplier links.</p> : <div className="history-list">{inventory.suppliers.map((supplier) => <article key={supplier.supplier_product_id}><div><a className="table-link" href={'#suppliers/' + supplier.supplier_id}>{supplier.supplier_name}</a><span>{supplier.lead_time_days} days · MOQ {quantity(supplier.moq)}</span></div><div><strong>{quantity(supplier.current_unit_cost)} {supplier.currency}</strong><span>{supplier.preferred ? 'Preferred' : 'Alternative'}</span></div></article>)}</div>}</section>
+        <section className="detail-card span-two"><div className="detail-card-heading"><h2>Recent movements</h2><a className="text-button" href={'#inventory/movements'}>Full ledger</a></div>{inventory.movements.length === 0 ? <p className="form-note">No movements.</p> : <div className="catalog-table-wrap embedded-table"><table className="catalog-table"><thead><tr><th>When</th><th>Location</th><th>Type</th><th>Quantity</th><th>Bucket</th><th>Reason</th></tr></thead><tbody>{inventory.movements.map((movement) => <tr key={movement.id}><td>{new Date(movement.occurred_at).toLocaleString()}</td><td>{movement.location_name}</td><td>{movement.movement_type.replaceAll('_', ' ')}</td><td className={Number(movement.quantity) < 0 ? 'negative-quantity' : 'positive-quantity'}>{Number(movement.quantity) > 0 ? '+' : ''}{quantity(movement.quantity)}</td><td>{movement.stock_bucket}</td><td>{movement.reason || '—'}</td></tr>)}</tbody></table></div>}</section>
+        <section className="detail-card span-two"><div className="detail-card-heading"><h2>Transfers</h2><a className="text-button" href="#inventory/transfers">All transfers</a></div>{inventory.transfers.length === 0 ? <p className="form-note">No transfers reference this SKU.</p> : <div className="receipt-timeline">{inventory.transfers.map((transfer) => <a key={transfer.id} href={'#inventory/transfers/' + transfer.id}><strong>{transfer.transfer_number} · {quantity(transfer.quantity)} units</strong><span>{transfer.source_location_name} → {transfer.destination_location_name} · {transfer.status.replace('_', ' ')}</span></a>)}</div>}</section>
+      </div>
+    </>
+  );
+}
