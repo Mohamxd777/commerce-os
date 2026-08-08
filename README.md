@@ -1,8 +1,8 @@
 # Commerce OS
 
-Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides a React interface, an Express REST API, PostgreSQL migrations, secure session authentication, organizations, users, roles, permissions, and locations.
+Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog covering brands, hierarchical categories, products, variants, SKUs, typed barcode identifiers, serial-tracking configuration, specifications, and image metadata.
 
-Products, inventory, purchasing, sales, accounting, and marketplace integrations are intentionally outside this task.
+Inventory quantities, suppliers, purchasing, sales, accounting, marketplace integrations, and physical serial-number instances remain intentionally deferred.
 
 ## Technology
 
@@ -117,6 +117,33 @@ npm run dev:server
 
 Vite proxies `/api` requests to the Express server during local development.
 
+## Product catalog
+
+The catalog follows this identity hierarchy:
+
+```text
+Brand → Product → Variant → SKU
+```
+
+A product describes the shared item, a variant describes a sellable version such as a color or layout, and a SKU is the organization-unique inventory identity. Quantity and prices do not belong on any of these identity records.
+
+Task 2 adds these authenticated, organization-scoped endpoints:
+
+- `GET|POST /api/brands` and `GET|PATCH /api/brands/:id`
+- `GET|POST /api/categories` and `GET|PATCH /api/categories/:id`
+- `GET|POST /api/products` and `GET|PATCH /api/products/:id`
+- `GET|POST /api/skus` and `GET|PATCH /api/skus/:id`
+
+List endpoints support server-side pagination and relevant search/filter query parameters. Every request requires the authenticated user's active organization in `x-organization-id`.
+
+Run Task 2 migrations with the same append-only command:
+
+```sh
+npm run db:migrate
+```
+
+See [`docs/product-catalog.md`](docs/product-catalog.md) for the product model, SKU guidance, barcode and image decisions, full endpoint behavior, and examples.
+
 ### Create the first owner
 
 After migrations are applied, create the first user and organization through the registration endpoint:
@@ -151,7 +178,7 @@ npm run test
 npm run build
 ```
 
-Current tests cover the reusable BusinessTerm tooltip, API health, shared validation and error responses, and password hashing/verification. Cross-layer tests that require a real database belong in `tests/` as domain workflows are introduced.
+Current tests cover the reusable BusinessTerm tooltip, SKU suggestions and validation, product-form structure, API health/errors, password hashing, brands, category hierarchy/cycles, transactional product creation, SKU uniqueness, organization isolation, search/filtering, pagination, and archival behavior.
 
 ## Project structure
 
@@ -206,4 +233,4 @@ For production, use a secrets manager, set `NODE_ENV=production`, serve only thr
 - Add sales channels behind integration boundaries instead of embedding marketplace logic in core modules.
 - Keep every applied migration unchanged and auditable.
 
-See `docs/architecture.md` for the Task 1 boundaries and tenancy model.
+See `docs/architecture.md` for the application boundaries and tenancy model, and `docs/product-catalog.md` for Task 2 decisions.

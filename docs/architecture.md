@@ -1,4 +1,4 @@
-# Task 1 architecture
+# Commerce OS architecture
 
 Commerce OS is a JavaScript monorepo with a React client, an Express REST API, and PostgreSQL migrations.
 
@@ -18,4 +18,6 @@ A user may belong to multiple organizations through memberships. A membership ma
 
 ## Deferred domains
 
-Products, variants, SKUs, inventory, suppliers, purchasing, sales, returns, marketplace integrations, expenses, settlements, and accounting are deliberately deferred beyond Task 1. Their future business rules belong in services and their authoritative history in PostgreSQL.
+Task 2 extends the same boundaries with brands, categories, products, variants, SKUs, barcode identifiers, and product image metadata. Catalog writes remain in services and PostgreSQL transactions; controllers only translate HTTP concerns.
+
+Inventory movements, physical serial instances, suppliers, purchasing, sales, returns, marketplace integrations, expenses, settlements, and accounting remain deferred. Their future business rules belong in services and their authoritative history in PostgreSQL.
