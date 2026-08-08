@@ -1,8 +1,8 @@
 # Commerce OS
 
-Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog covering brands, hierarchical categories, products, variants, SKUs, typed barcode identifiers, serial-tracking configuration, specifications, and image metadata.
+Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog. Task 3 adds suppliers, supplier-specific SKU offers and price history, purchase orders, controlled approval/ordering states, and partial goods receiving.
 
-Inventory quantities, suppliers, purchasing, sales, accounting, marketplace integrations, and physical serial-number instances remain intentionally deferred.
+Inventory ledger movements, sales, accounting, landed-cost allocation, marketplace integrations, and physical serial-number instances remain intentionally deferred.
 
 ## Technology
 
@@ -144,6 +144,31 @@ npm run db:migrate
 
 See [`docs/product-catalog.md`](docs/product-catalog.md) for the product model, SKU guidance, barcode and image decisions, full endpoint behavior, and examples.
 
+## Suppliers and purchasing
+
+Task 3 separates stable SKU identity from supplier-specific commercial offers:
+
+```text
+Supplier → Supplier Product ← SKU
+Supplier → Purchase Order → PO Item → Goods Receipt Item
+```
+
+Supplier products hold current cost, currency, MOQ, lead time, and preference. Price changes preserve append-only effective history. PO items copy the agreed cost so later supplier-price changes cannot rewrite an order.
+
+Purchase-order totals are calculated server-side with PostgreSQL `NUMERIC`. Controlled actions move a PO from draft to approved, ordered, partially received, and received. Goods receipts preserve accepted and rejected quantities but do not create inventory ledger movements in Task 3.
+
+Key authenticated endpoints include:
+
+- `GET|POST /api/suppliers` and `GET|PATCH /api/suppliers/:id`
+- `GET|POST /api/supplier-products`, `PATCH /api/supplier-products/:id`, and `POST /api/supplier-products/:id/price`
+- `GET /api/skus/:id/suppliers`
+- `GET|POST /api/purchase-orders` and `GET|PATCH /api/purchase-orders/:id`
+- PO approval, ordered, cancellation, and receipt action endpoints
+- `GET /api/goods-receipts` and `GET /api/goods-receipts/:id`
+- `GET /api/purchasing-summary`
+
+See [`docs/purchasing.md`](docs/purchasing.md) for the data model, financial rules, workflow, partial receiving, permissions, and full endpoint table.
+
 ### Create the first owner
 
 After migrations are applied, create the first user and organization through the registration endpoint:
@@ -178,7 +203,7 @@ npm run test
 npm run build
 ```
 
-Current tests cover the reusable BusinessTerm tooltip, SKU suggestions and validation, product-form structure, API health/errors, password hashing, brands, category hierarchy/cycles, transactional product creation, SKU uniqueness, organization isolation, search/filtering, pagination, and archival behavior.
+Current tests cover the reusable BusinessTerm tooltips, SKU and product forms, supplier and PO forms, receiving UI, API health/errors, password hashing, catalog transactions, supplier duplicate protection, supplier-SKU linking, MOQ, price history, comparison, authoritative PO totals, status transitions, permissions, partial/multiple receipts, rejection tracking, over-receipt protection, organization isolation, pagination, and archival behavior.
 
 ## Project structure
 
@@ -227,10 +252,10 @@ For production, use a secrets manager, set `NODE_ENV=production`, serve only thr
 
 - Keep business logic in services, not routes or React components.
 - Use parameterized SQL and database constraints.
-- Use PostgreSQL `NUMERIC`/`DECIMAL` for authoritative monetary values in future modules.
+- Use PostgreSQL `NUMERIC`/`DECIMAL` for authoritative monetary values and calculate purchasing totals server-side.
 - Preserve operational and financial history through statuses, archives, and reversal records.
 - Model stock through an immutable inventory movement ledger when the inventory task begins.
 - Add sales channels behind integration boundaries instead of embedding marketplace logic in core modules.
 - Keep every applied migration unchanged and auditable.
 
-See `docs/architecture.md` for the application boundaries and tenancy model, and `docs/product-catalog.md` for Task 2 decisions.
+See `docs/architecture.md` for the application boundaries and tenancy model, `docs/product-catalog.md` for Task 2 decisions, and `docs/purchasing.md` for Task 3 decisions.

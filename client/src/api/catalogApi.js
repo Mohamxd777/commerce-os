@@ -1,4 +1,4 @@
-async function apiRequest(path, { organizationId, method = 'GET', body } = {}) {
+export async function apiRequest(path, { organizationId, method = 'GET', body } = {}) {
   const response = await fetch('/api' + path, {
     method,
     credentials: 'include',
@@ -23,7 +23,7 @@ async function apiRequest(path, { organizationId, method = 'GET', body } = {}) {
   return payload;
 }
 
-function queryString(parameters) {
+export function queryString(parameters) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(parameters)) {
     if (value !== '' && value !== undefined && value !== null) {

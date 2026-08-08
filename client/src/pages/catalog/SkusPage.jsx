@@ -38,13 +38,14 @@ export default function SkusPage({ organizationId }) {
       {state.loading ? <LoadingState /> : state.error ? <ErrorState error={state.error} /> : skus.length === 0 ? <EmptyState title="No SKUs found" message="Create a product with at least one variant and SKU." /> : (
         <div className="catalog-table-wrap">
           <table className="catalog-table">
-            <thead><tr><th><BusinessTerm term="SKU" explanation="كود داخلي مميز لكل نسخة قابلة للبيع من المنتج." /></th><th>Product / Variant</th><th>Barcodes</th><th>Serial tracking</th><th>Status</th></tr></thead>
+            <thead><tr><th><BusinessTerm term="SKU" explanation="كود داخلي مميز لكل نسخة قابلة للبيع من المنتج." /></th><th>Product / Variant</th><th>Barcodes</th><th>Serial tracking</th><th>Suppliers</th><th>Status</th></tr></thead>
             <tbody>{skus.map((sku) => (
               <tr key={sku.id}>
                 <td><strong>{sku.sku_code}</strong><small>{sku.manufacturer_part_number || 'No MPN'}</small></td>
                 <td><a className="table-link" href={'#products/' + sku.product_id}>{sku.product_name}</a><small>{sku.variant_name}</small></td>
                 <td>{sku.barcode_count}</td>
                 <td><button className="text-button" onClick={() => toggle(sku, 'serialTrackingEnabled')}>{sku.serial_tracking_enabled ? 'Required' : 'Not required'}</button></td>
+                <td><a className="table-link" href={'#skus/' + sku.id + '/suppliers'}>Compare suppliers</a></td>
                 <td><button className="text-button" onClick={() => toggle(sku, 'isActive')}>{sku.is_active ? 'Active' : 'Archived'}</button></td>
               </tr>
             ))}</tbody>

@@ -10,6 +10,17 @@ import ProductEditPage from './ProductEditPage.jsx';
 import ProductFormPage from './ProductFormPage.jsx';
 import ProductsPage from './ProductsPage.jsx';
 import SkusPage from './SkusPage.jsx';
+import GoodsReceiptDetailPage from '../purchasing/GoodsReceiptDetailPage.jsx';
+import GoodsReceiptsPage from '../purchasing/GoodsReceiptsPage.jsx';
+import PurchaseOrderDetailPage from '../purchasing/PurchaseOrderDetailPage.jsx';
+import PurchaseOrderFormPage from '../purchasing/PurchaseOrderFormPage.jsx';
+import PurchaseOrdersPage from '../purchasing/PurchaseOrdersPage.jsx';
+import PurchasingOverviewPage from '../purchasing/PurchasingOverviewPage.jsx';
+import ReceivePurchaseOrderPage from '../purchasing/ReceivePurchaseOrderPage.jsx';
+import SupplierComparisonPage from '../purchasing/SupplierComparisonPage.jsx';
+import SupplierDetailPage from '../purchasing/SupplierDetailPage.jsx';
+import SupplierFormPage from '../purchasing/SupplierFormPage.jsx';
+import SuppliersPage from '../purchasing/SuppliersPage.jsx';
 
 function useHashRoute() {
   const readRoute = () => window.location.hash.slice(1) || 'overview';
@@ -157,6 +168,27 @@ export default function CatalogApp() {
   } else if (route === 'brands') page = <BrandsPage organizationId={organizationId} />;
   else if (route === 'categories') page = <CategoriesPage organizationId={organizationId} />;
   else if (route === 'skus') page = <SkusPage organizationId={organizationId} />;
+  else if (/^skus\/[^/]+\/suppliers$/.test(route)) {
+    page = <SupplierComparisonPage organizationId={organizationId} skuId={route.split('/')[1]} />;
+  } else if (route === 'purchasing') page = <PurchasingOverviewPage organizationId={organizationId} />;
+  else if (route === 'suppliers') page = <SuppliersPage organizationId={organizationId} />;
+  else if (route === 'suppliers/new') page = <SupplierFormPage organizationId={organizationId} />;
+  else if (/^suppliers\/[^/]+\/edit$/.test(route)) {
+    page = <SupplierFormPage organizationId={organizationId} supplierId={route.split('/')[1]} />;
+  } else if (/^suppliers\/[^/]+$/.test(route)) {
+    page = <SupplierDetailPage organizationId={organizationId} supplierId={route.split('/')[1]} />;
+  } else if (route === 'purchase-orders') page = <PurchaseOrdersPage organizationId={organizationId} />;
+  else if (route === 'purchase-orders/new') page = <PurchaseOrderFormPage organizationId={organizationId} />;
+  else if (/^purchase-orders\/[^/]+\/edit$/.test(route)) {
+    page = <PurchaseOrderFormPage organizationId={organizationId} purchaseOrderId={route.split('/')[1]} />;
+  } else if (/^purchase-orders\/[^/]+\/receive$/.test(route)) {
+    page = <ReceivePurchaseOrderPage organizationId={organizationId} purchaseOrderId={route.split('/')[1]} />;
+  } else if (/^purchase-orders\/[^/]+$/.test(route)) {
+    page = <PurchaseOrderDetailPage organizationId={organizationId} purchaseOrderId={route.split('/')[1]} />;
+  } else if (route === 'goods-receipts') page = <GoodsReceiptsPage organizationId={organizationId} />;
+  else if (/^goods-receipts\/[^/]+$/.test(route)) {
+    page = <GoodsReceiptDetailPage organizationId={organizationId} receiptId={route.split('/')[1]} />;
+  }
 
   return (
     <AppLayout

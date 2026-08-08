@@ -1,7 +1,11 @@
 import pg from 'pg';
 import { env } from './env.js';
 
-const { Pool } = pg;
+const { Pool, types } = pg;
+
+// PostgreSQL DATE values have no timezone. Keep them as YYYY-MM-DD strings so
+// JSON serialization cannot shift a purchasing date across calendar days.
+types.setTypeParser(1082, (value) => value);
 
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,

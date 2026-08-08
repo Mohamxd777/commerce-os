@@ -12,6 +12,15 @@ const navigationGroups = [
       ['SKUs', '#skus'],
     ],
   },
+  {
+    label: 'Purchasing',
+    items: [
+      ['Summary', '#purchasing'],
+      ['Suppliers', '#suppliers'],
+      ['Purchase Orders', '#purchase-orders'],
+      ['Goods Receipts', '#goods-receipts'],
+    ],
+  },
 ];
 
 export default function AppLayout({
@@ -55,7 +64,7 @@ export default function AppLayout({
       <div className="page">
         <header className="topbar" id="top">
           <div><span className="mobile-brand">Commerce OS</span></div>
-          <div className="environment"><span />Catalog foundation</div>
+          <div className="environment"><span />Catalog &amp; purchasing</div>
         </header>
         <main>{children}</main>
       </div>

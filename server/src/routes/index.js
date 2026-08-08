@@ -3,6 +3,7 @@ import { query } from '../config/database.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRouter } from './authRoutes.js';
 import { brandRouter, categoryRouter, productRouter, skuRouter } from './catalogRoutes.js';
+import { purchasingRouter } from './purchasingRoutes.js';
 
 export const apiRouter = Router();
 
@@ -35,3 +36,4 @@ apiRouter.use('/brands', brandRouter);
 apiRouter.use('/categories', categoryRouter);
 apiRouter.use('/products', productRouter);
 apiRouter.use('/skus', skuRouter);
+apiRouter.use(purchasingRouter);
