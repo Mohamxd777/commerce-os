@@ -31,6 +31,15 @@ const navigationGroups = [
       ['Reorder Rules', '#inventory/reorder-rules'],
     ],
   },
+  {
+    label: 'Research',
+    items: [
+      ['Dashboard', '#research'],
+      ['Candidates', '#research/candidates'],
+      ['Comparison', '#research/comparison'],
+      ['Launch Settings', '#research/settings'],
+    ],
+  },
 ];
 
 export default function AppLayout({
@@ -75,7 +84,7 @@ export default function AppLayout({
       <div className="page">
         <header className="topbar" id="top">
           <div><span className="mobile-brand">Commerce OS</span></div>
-          <div className="environment"><span />Catalog, purchasing &amp; inventory</div>
+          <div className="environment"><span />Catalog, purchasing, inventory &amp; research</div>
         </header>
         <main>{children}</main>
       </div>

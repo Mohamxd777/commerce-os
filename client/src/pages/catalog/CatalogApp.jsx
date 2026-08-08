@@ -30,6 +30,12 @@ import InventoryTransferDetailPage from '../inventory/InventoryTransferDetailPag
 import InventoryTransferFormPage from '../inventory/InventoryTransferFormPage.jsx';
 import InventoryTransfersPage from '../inventory/InventoryTransfersPage.jsx';
 import SkuInventoryDetailPage from '../inventory/SkuInventoryDetailPage.jsx';
+import ResearchCandidateDetailPage from '../research/ResearchCandidateDetailPage.jsx';
+import ResearchCandidateFormPage from '../research/ResearchCandidateFormPage.jsx';
+import ResearchCandidatesPage from '../research/ResearchCandidatesPage.jsx';
+import ResearchComparisonPage from '../research/ResearchComparisonPage.jsx';
+import ResearchOverviewPage from '../research/ResearchOverviewPage.jsx';
+import ResearchSettingsPage from '../research/ResearchSettingsPage.jsx';
 
 function useHashRoute() {
   const readRoute = () => window.location.hash.slice(1) || 'overview';
@@ -208,7 +214,16 @@ export default function CatalogApp() {
   } else if (route === 'inventory/reorder-rules') page = <InventoryReorderRulesPage organizationId={organizationId} />;
   else if (/^inventory\/skus\/[^/]+$/.test(route)) {
     page = <SkuInventoryDetailPage organizationId={organizationId} skuId={route.split('/')[2]} />;
-  }
+  } else if (route === 'research') page = <ResearchOverviewPage organizationId={organizationId} />;
+  else if (route === 'research/candidates') page = <ResearchCandidatesPage organizationId={organizationId} />;
+  else if (route === 'research/candidates/new') page = <ResearchCandidateFormPage organizationId={organizationId} />;
+  else if (/^research\/candidates\/[^/]+$/.test(route)) {
+    page = <ResearchCandidateDetailPage organizationId={organizationId} candidateId={route.split('/')[2]} />;
+  } else if (route === 'research/comparison') {
+    page = <ResearchComparisonPage organizationId={organizationId} />;
+  } else if (/^research\/comparison\/[^/]+$/.test(route)) {
+    page = <ResearchComparisonPage organizationId={organizationId} initialIds={route.split('/')[2].split(',')} />;
+  } else if (route === 'research/settings') page = <ResearchSettingsPage organizationId={organizationId} />;
 
   return (
     <AppLayout

@@ -1126,6 +1126,357 @@ textarea:focus {
   }
 }
 
+/* Task 5 · product research, samples, and launch decisions */
+.research-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.research-summary-grid .summary-card {
+  min-height: 132px;
+}
+
+.capital-panel,
+.conversion-panel,
+.candidate-stage-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  margin: 22px 0;
+  padding: 26px;
+  background: #f1f7f2;
+  border: 1px solid #cddfd2;
+  border-radius: 14px;
+}
+
+.capital-panel h2,
+.conversion-panel h2 {
+  margin: 4px 0 8px;
+}
+
+.capital-panel p:not(.eyebrow),
+.conversion-panel p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted);
+}
+
+.capital-panel > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.capital-panel.budget-warning {
+  background: #fff6df;
+  border-color: #ead29a;
+}
+
+.warning-badge {
+  padding: 8px 12px;
+  color: #795416;
+  background: #ffe5a7;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.research-filters {
+  grid-template-columns: minmax(240px, 1.2fr) repeat(6, minmax(130px, 0.55fr)) auto;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.pagination-bar > div {
+  display: flex;
+  gap: 8px;
+}
+
+.research-table {
+  min-width: 1120px;
+}
+
+.candidate-stage-panel > div {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.candidate-stage-panel > div small {
+  color: var(--muted);
+}
+
+.candidate-stage-panel form {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
+.candidate-stage-panel label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.research-detail-grid {
+  align-items: start;
+}
+
+.research-detail-grid > .detail-card {
+  overflow: hidden;
+}
+
+.embedded-form {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0 20px;
+}
+
+.compact-history {
+  max-height: 310px;
+  overflow-y: auto;
+}
+
+.checklist-builder {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: #f7f9f7;
+  border: 1px solid #e1e8e3;
+  border-radius: 9px;
+}
+
+.check-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tag-button {
+  padding: 6px 9px;
+  color: #315747;
+  background: #e8f1eb;
+  border: 1px solid #cadccf;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.inline-field,
+.sample-check {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 9px;
+}
+
+.sample-check {
+  grid-template-columns: minmax(150px, 0.7fr) minmax(115px, 0.35fr) 1fr;
+  align-items: center;
+}
+
+.research-calculator {
+  grid-column: 1 / -1;
+}
+
+.research-calculator form {
+  display: grid;
+  gap: 16px;
+}
+
+.economics-results {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.economics-results article {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  background: #f3f7f4;
+  border: 1px solid #dae6dd;
+  border-radius: 9px;
+}
+
+.economics-results span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.economics-results strong {
+  color: #193f31;
+  font-size: 1.05rem;
+}
+
+.decision-summary {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  background: #eef5f0;
+  border-radius: 9px;
+}
+
+.decision-summary strong {
+  text-transform: capitalize;
+}
+
+.decision-summary small {
+  color: var(--muted);
+  text-align: right;
+}
+
+.conversion-panel {
+  align-items: start;
+  background: #e9f4ec;
+}
+
+.conversion-panel > div:first-child {
+  max-width: 390px;
+}
+
+.conversion-panel form {
+  flex: 1;
+}
+
+.candidate-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0;
+  padding: 15px;
+  background: #f7f9f7;
+  border: 1px solid #dfe7e1;
+  border-radius: 10px;
+}
+
+.candidate-picker label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #dce5df;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.comparison-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.comparison-table th,
+.comparison-table td {
+  padding: 13px 15px;
+  border-bottom: 1px solid #e3e9e5;
+  text-align: left;
+  vertical-align: top;
+}
+
+.comparison-table thead th,
+.comparison-table tbody th {
+  color: #244b3c;
+  background: #f4f7f5;
+}
+
+.comparison-table a {
+  color: #1d6548;
+  font-weight: 900;
+}
+
+.status-pill.research,
+.status-pill.sourcing,
+.status-pill.needs_more_research,
+.status-pill.pending,
+.status-pill.retest {
+  color: #655727;
+  background: #f4edcf;
+}
+
+.status-pill.shortlisted,
+.status-pill.sampling,
+.status-pill.maybe {
+  color: #315278;
+  background: #e2ebf5;
+}
+
+.status-pill.approved,
+.status-pill.launched,
+.status-pill.pass,
+.status-pill.buy {
+  color: #206044;
+  background: #dff2e8;
+}
+
+.status-pill.rejected,
+.status-pill.fail,
+.status-pill.reject {
+  color: #8d3e36;
+  background: #f8dfdc;
+}
+
+@media (max-width: 1100px) {
+  .research-summary-grid,
+  .economics-results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .conversion-panel {
+    flex-direction: column;
+  }
+
+  .conversion-panel > div:first-child {
+    max-width: none;
+  }
+
+  .research-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .research-summary-grid,
+  .research-filters,
+  .economics-results,
+  .sample-check {
+    grid-template-columns: 1fr;
+  }
+
+  .capital-panel,
+  .candidate-stage-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .candidate-stage-panel form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pagination-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 /* Task 3 · suppliers and purchasing */
 .purchasing-form {
   display: grid;

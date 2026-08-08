@@ -1,6 +1,6 @@
 # Commerce OS
 
-Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog. Task 3 adds suppliers and purchasing. Task 4 adds an immutable inventory ledger, transactional stock projections, explicit receipt posting, transfers, adjustments, bucket control, reorder planning, and reconciliation.
+Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog. Task 3 adds suppliers and purchasing. Task 4 adds an immutable inventory ledger and stock control. Task 5 adds product research, market/supplier evidence, flexible sample evaluation, unit economics, launch decisions, capital planning, candidate comparison, and explicit catalog conversion.
 
 Sales, accounting, inventory valuation, landed-cost allocation, marketplace integrations, and physical serial-number instances remain intentionally deferred.
 
@@ -185,6 +185,19 @@ The React Inventory navigation provides Overview, Stock, Movements, Transfers, a
 
 See [`docs/inventory.md`](docs/inventory.md) for sign conventions, movement types, buckets, locking, transfers, adjustments, idempotency, reconciliation, permissions, the full API, and deferred serial-instance design.
 
+## Product research and launch decisions
+
+Task 5 keeps product hypotheses outside the operational catalog until they pass a controlled research workflow:
+
+```text
+Candidate → market and supplier evidence → sample → unit economics → launch evaluation
+Approved candidate → explicit reviewed transaction → draft Product + Variant + SKU
+```
+
+The Research navigation provides a dashboard, paginated candidate pipeline, detailed evidence workspace, selected-candidate comparison, and organization launch settings. Monetary calculations use PostgreSQL `NUMERIC`, fee assumptions preserve effective history and sources, and capital warnings use each candidate's latest structured evaluation. Conversion never creates stock, a supplier-product relationship, or a purchase order.
+
+See [`docs/product-research.md`](docs/product-research.md) for formulas, status transitions, tables, permissions, API routes, comparison rules, capital allocation, and conversion behavior.
+
 ### Create the first owner
 
 After migrations are applied, create the first user and organization through the registration endpoint:
@@ -219,7 +232,7 @@ npm run test
 npm run build
 ```
 
-Current tests cover reusable business terms, catalog and purchasing workflows, receipt evidence, ledger posting idempotency, rejected-quantity exclusion, adjustment and bucket movements, negative-stock rollback, transfer retries, concurrent stock consumption, reorder rules, low-stock detection, organization isolation, permissions, direct-write protection, and ledger/projection reconciliation.
+Current tests cover reusable business terms, catalog and purchasing workflows, inventory ledger safety, and the research workflow: decimal economics, evidence histories, samples, decisions, budget warnings, selected comparison, status transitions, permissions, organization isolation, and atomic non-duplicate catalog conversion.
 
 ## Project structure
 
@@ -268,7 +281,7 @@ For production, use a secrets manager, set `NODE_ENV=production`, serve only thr
 
 - Keep business logic in services, not routes or React components.
 - Use parameterized SQL and database constraints.
-- Use PostgreSQL `NUMERIC`/`DECIMAL` for authoritative monetary values and calculate purchasing totals server-side.
+- Use PostgreSQL `NUMERIC`/`DECIMAL` for authoritative monetary values and calculate purchasing and research economics server-side.
 - Preserve operational and financial history through statuses, archives, and reversal records.
 - Model stock through an immutable inventory movement ledger when the inventory task begins.
 - Add sales channels behind integration boundaries instead of embedding marketplace logic in core modules.
