@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   candidateCreateSchema, comparisonSchema, economicsCreateSchema,
-  evidenceCreateSchema, sampleCreateSchema, supplierOptionCreateSchema,
+  evidenceCreateSchema, quickCaptureCreateSchema, sampleCreateSchema, supplierOptionCreateSchema,
 } from '../src/validators/researchValidators.js';
 
 describe('Research validation', () => {
@@ -13,6 +13,17 @@ describe('Research validation', () => {
       query: {},
     });
     assert.equal(result.success, false);
+  });
+
+  it('keeps quick capture limited to product, supplier, and price requirements', () => {
+    const valid = quickCaptureCreateSchema.safeParse({
+      params: {}, query: {}, body: { name: 'USB-C Hub', supplierName: 'Al Alameya', unitPrice: '130' },
+    });
+    assert.equal(valid.success, true);
+    const missingSupplier = quickCaptureCreateSchema.safeParse({
+      params: {}, query: {}, body: { name: 'USB-C Hub', unitPrice: '130' },
+    });
+    assert.equal(missingSupplier.success, false);
   });
 
   it('rejects a 100 percent referral fee that has no break-even solution', () => {

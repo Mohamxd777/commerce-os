@@ -1,9 +1,12 @@
 import { useState } from 'react';
 
-const accessoryChecks = ['Build quality', 'Packaging quality', 'USB-C power delivery', 'HDMI output', 'Thermal stability'];
+const accessoryChecks = [
+  'Physical build quality', 'Packaging quality', 'Functionality', 'Compatibility',
+  'Performance', 'Defect observed', 'USB-C power delivery', 'HDMI output',
+];
 
 export default function SampleEvaluationForm({ supplierOptions = [], onSubmit }) {
-  const [form, setForm] = useState({ supplierOptionId: '', referenceCode: '', orderedAt: '', receivedAt: '', sampleCost: '', currency: 'EGP', result: 'pending', notes: '' });
+  const [form, setForm] = useState({ supplierOptionId: '', referenceCode: '', orderedAt: '', receivedAt: '', sampleCost: '', currency: 'EGP', workflowState: 'requested', notes: '' });
   const [checklist, setChecklist] = useState([]);
   const [customLabel, setCustomLabel] = useState('');
 
@@ -23,7 +26,9 @@ export default function SampleEvaluationForm({ supplierOptions = [], onSubmit })
       referenceCode: form.referenceCode || null,
       orderedAt: form.orderedAt || null, receivedAt: form.receivedAt || null,
       sampleCost: form.sampleCost || null, currency: form.sampleCost ? form.currency : null,
-      result: form.result, checklist, notes: form.notes || null,
+      workflowState: form.workflowState,
+      result: form.workflowState === 'passed' ? 'pass' : form.workflowState === 'failed' ? 'fail' : 'pending',
+      checklist, notes: form.notes || null,
     });
   }
 
@@ -32,7 +37,7 @@ export default function SampleEvaluationForm({ supplierOptions = [], onSubmit })
       <div className="form-grid three-columns">
         <label>Supplier option<select value={form.supplierOptionId} onChange={(event) => update('supplierOptionId', event.target.value)}><option value="">Not linked</option>{supplierOptions.map((option) => <option key={option.id} value={option.id}>{option.supplier_name || option.lead_name}</option>)}</select></label>
         <label>Sample reference<input value={form.referenceCode} onChange={(event) => update('referenceCode', event.target.value)} /></label>
-        <label>Result<select value={form.result} onChange={(event) => update('result', event.target.value)}><option value="pending">Pending</option><option value="pass">Pass</option><option value="fail">Fail</option><option value="retest">Retest</option></select></label>
+        <label>Sample state<select value={form.workflowState} onChange={(event) => update('workflowState', event.target.value)}><option value="not_requested">Not requested</option><option value="requested">Requested</option><option value="purchased">Purchased</option><option value="testing">Testing</option><option value="passed">Passed</option><option value="failed">Failed</option></select></label>
         <label>Ordered<input type="date" value={form.orderedAt} onChange={(event) => update('orderedAt', event.target.value)} /></label>
         <label>Received<input type="date" value={form.receivedAt} onChange={(event) => update('receivedAt', event.target.value)} /></label>
         <label>Sample cost<input type="number" min="0" step="0.0001" value={form.sampleCost} onChange={(event) => update('sampleCost', event.target.value)} /></label>

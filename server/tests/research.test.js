@@ -24,6 +24,7 @@ let candidateId;
 let comparisonCandidateId;
 let supplierOptionId;
 let economicsId;
+let quickCaptureCandidateId;
 
 function headers(httpRequest, organizationId, cookie) {
   return httpRequest.set('x-organization-id', organizationId).set('Cookie', cookie);
@@ -218,6 +219,83 @@ describe('Product research API', { concurrency: false }, () => {
     comparisonCandidateId = second.body.data.id;
   });
 
+  it('creates a needs-research candidate through the under-a-minute quick capture flow', async () => {
+    const captured = await headers(
+      request(app).post('/api/research/quick-capture'), organizationA, ownerCookieA,
+    ).send({
+      name: 'USB-C Hub 3-in-1 ' + suffix,
+      supplierId,
+      unitPrice: '130',
+      currency: 'EGP',
+      modelNumber: 'HUB-3IN1',
+      gtin: '12345678',
+      moq: '1',
+      warrantyText: '12 months',
+      invoiceAvailable: true,
+      notes: 'Captured inside the supplier shop',
+    });
+    assert.equal(captured.status, 201, JSON.stringify(captured.body));
+    quickCaptureCandidateId = captured.body.data.id;
+    assert.equal(captured.body.data.status, 'research');
+    assert.equal(captured.body.data.suppliers.length, 1);
+    assert.equal(captured.body.data.suppliers[0].quoted_unit_cost, '130.0000');
+    assert.equal(captured.body.data.suppliers[0].same_price_all_quantities, true);
+    assert.equal(captured.body.data.snapshots.length, 0);
+    assert.equal(captured.body.data.economics.length, 0);
+  });
+
+  it('stores quantity pricing and keeps cheapest separate from the selected best supplier', async () => {
+    const tiered = await headers(
+      request(app).post('/api/research/candidates/' + candidateId + '/suppliers'),
+      organizationA, ownerCookieA,
+    ).send({
+      leadName: 'Tiered Supplier ' + suffix,
+      quotedUnitCost: '490', currency: 'EGP', moq: '1', leadTimeDays: 2,
+      samePriceAllQuantities: false,
+      priceQty1: '490', priceQty5: '480', priceQty10: '470',
+      priceQty20: '460', priceQty50: '450', priceQty100: '440',
+      warrantyText: 'No warranty', defectiveUnitReplacement: false,
+      invoiceAvailable: false, sampleAvailable: false, preferred: false,
+    });
+    assert.equal(tiered.status, 201, JSON.stringify(tiered.body));
+    assert.equal(tiered.body.data.price_qty_100, '440.0000');
+
+    const detail = await headers(
+      request(app).get('/api/research/candidates/' + candidateId), organizationA, ownerCookieA,
+    );
+    assert.equal(detail.status, 200, JSON.stringify(detail.body));
+    assert.equal(detail.body.data.cheapest_supplier_name, 'Shenzhen Hub Lead');
+    assert.equal(detail.body.data.cheapest_unit_cost, '470.0000');
+    assert.equal(detail.body.data.preferred_supplier_name, 'Research Supplier ' + suffix);
+    assert.equal(detail.body.data.quoted_unit_cost, '500.0000');
+  });
+
+  it('keeps multiple Noon observations separate from the planned selling price', async () => {
+    const secondObservation = await headers(
+      request(app).post('/api/research/candidates/' + candidateId + '/snapshots'),
+      organizationA, ownerCookieA,
+    ).send({
+      marketplace: 'Noon Egypt',
+      listingTitle: 'USB-C Hub competitor listing',
+      listingUrl: 'https://www.noon.com/egypt-en/example-hub',
+      sellerBrand: 'Generic', sellingPrice: '900', originalPrice: '1100', currency: 'EGP',
+      rating: 4.2, reviewCount: 120, recentSalesSignal: '50+ sold recently',
+      bestsellerRankText: '#12 in USB hubs', fulfillmentBadge: 'noon express',
+      observedAt: '2026-08-10T12:00:00.000Z',
+    });
+    assert.equal(secondObservation.status, 201, JSON.stringify(secondObservation.body));
+
+    const planned = await headers(
+      request(app).patch('/api/research/candidates/' + candidateId), organizationA, ownerCookieA,
+    ).send({ plannedSellingPrice: '950', plannedPriceCurrency: 'EGP' });
+    assert.equal(planned.status, 200, JSON.stringify(planned.body));
+    assert.equal(planned.body.data.planned_selling_price, '950.0000');
+    assert.equal(planned.body.data.minimum_observed_price, '900.0000');
+    assert.equal(planned.body.data.median_observed_price, '950.0000');
+    assert.equal(planned.body.data.observation_count, 2);
+    assert.notEqual(planned.body.data.planned_selling_price, planned.body.data.market_price);
+  });
+
   it('stores fee history and authoritative PostgreSQL decimal unit economics', async () => {
     const fee = await headers(
       request(app).post('/api/research/candidates/' + candidateId + '/fee-assumptions'),
@@ -249,6 +327,42 @@ describe('Product research API', { concurrency: false }, () => {
     assert.equal(economics.body.data.break_even_price, '738.8889');
     assert.equal(economics.body.data.max_purchase_price_for_target_margin, '535.0000');
     assert.equal(economics.body.data.max_purchase_price_for_target_roi, '535.0000');
+
+    const recalculated = await headers(
+      request(app).post('/api/research/candidates/' + candidateId + '/unit-economics'),
+      organizationA, ownerCookieA,
+    ).send({
+      supplierOptionId, currency: 'USD', sellingPrice: '1', supplierUnitCost: '1',
+      referralFeePercentage: '10', targetMarginPercentage: '20', targetRoiPercentage: '25',
+    });
+    assert.equal(recalculated.status, 201, JSON.stringify(recalculated.body));
+    assert.equal(recalculated.body.data.supplier_option_id, supplierOptionId);
+    assert.equal(recalculated.body.data.currency, 'EGP');
+    assert.equal(recalculated.body.data.selling_price, '950.0000');
+    assert.equal(recalculated.body.data.supplier_unit_cost, '500.0000');
+  });
+
+  it('enforces the sample workflow state transitions', async () => {
+    const created = await headers(
+      request(app).post('/api/research/candidates/' + comparisonCandidateId + '/samples'),
+      organizationA, ownerCookieA,
+    ).send({ workflowState: 'not_requested', result: 'pending', checklist: [] });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const sampleId = created.body.data.id;
+
+    for (const workflowState of ['requested', 'purchased', 'testing', 'passed']) {
+      const moved = await headers(
+        request(app).patch('/api/research/samples/' + sampleId), organizationA, ownerCookieA,
+      ).send({ workflowState });
+      assert.equal(moved.status, 200, JSON.stringify(moved.body));
+      assert.equal(moved.body.data.workflow_state, workflowState);
+    }
+
+    const invalid = await headers(
+      request(app).patch('/api/research/samples/' + sampleId), organizationA, ownerCookieA,
+    ).send({ workflowState: 'failed' });
+    assert.equal(invalid.status, 409);
+    assert.equal(invalid.body.error.code, 'RESEARCH_SAMPLE_TRANSITION_INVALID');
   });
 
   it('enforces controlled status transitions and records a structured launch evaluation', async () => {
@@ -309,7 +423,7 @@ describe('Product research API', { concurrency: false }, () => {
     const hub = comparison.body.data.find((candidate) => candidate.id === candidateId);
     assert.equal(hub.preferred_supplier_name, 'Research Supplier ' + suffix);
     assert.equal(hub.supplier_currency, 'EGP');
-    assert.equal(hub.net_margin_percentage, '23.5000');
+    assert.equal(hub.net_margin_percentage, '37.3684');
     assert.equal(hub.sample_result, 'pass');
   });
 
@@ -331,8 +445,8 @@ describe('Product research API', { concurrency: false }, () => {
       request(app).get('/api/research/candidates?page=2&limit=1'), organizationA, ownerCookieA,
     );
     assert.equal(secondPage.status, 200, JSON.stringify(secondPage.body));
-    assert.equal(secondPage.body.meta.total, 2);
-    assert.equal(secondPage.body.meta.totalPages, 2);
+    assert.equal(secondPage.body.meta.total, 3);
+    assert.equal(secondPage.body.meta.totalPages, 3);
     assert.equal(secondPage.body.data.length, 1);
   });
 
@@ -346,6 +460,11 @@ describe('Product research API', { concurrency: false }, () => {
       request(app).post('/api/research/candidates'), organizationA, memberCookie,
     ).send({ name: 'Denied candidate', status: 'research' });
     assert.equal(write.status, 403);
+
+    const quickCapture = await headers(
+      request(app).post('/api/research/quick-capture'), organizationA, memberCookie,
+    ).send({ name: 'Denied quick capture', supplierName: 'Denied', unitPrice: '10' });
+    assert.equal(quickCapture.status, 403);
 
     const evaluation = await headers(
       request(app).post('/api/research/candidates/' + candidateId + '/unit-economics'),
@@ -377,6 +496,11 @@ describe('Product research API', { concurrency: false }, () => {
       organizationB, ownerCookieB,
     ).send({ result: 'pending', checklist: [] });
     assert.equal(hiddenMutation.status, 404);
+
+    const hiddenQuickCapture = await headers(
+      request(app).get('/api/research/candidates/' + quickCaptureCandidateId), organizationB, ownerCookieB,
+    );
+    assert.equal(hiddenQuickCapture.status, 404);
   });
 
   it('converts an approved candidate once without creating supplier inventory or purchase orders', async () => {

@@ -39,6 +39,7 @@ const positiveDecimal = decimal({ positive: true });
 const percentage = decimal({ maximum: 3 }).refine((value) => Number(value) <= 100, 'Must be at most 100.');
 const score = z.coerce.number().int().min(1).max(5);
 const candidateStatus = z.enum(['research', 'shortlisted', 'sourcing', 'sampling', 'approved', 'rejected', 'launched']);
+const sampleWorkflowState = z.enum(['not_requested', 'requested', 'purchased', 'testing', 'passed', 'failed']);
 const pageQuery = {
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -57,6 +58,7 @@ export const candidateListSchema = requestSchema({
     decision: z.enum(['buy', 'maybe', 'reject', 'needs_more_research']).optional(),
     risk: z.enum(['low', 'medium', 'high']).optional(),
     supplier: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+    supplierId: uuid.optional(),
     sample: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   }).strict(),
 });
@@ -66,16 +68,29 @@ const candidateFields = {
   name: z.string().trim().min(1).max(200),
   brandName: optionalText(160),
   marketplaceUrl: url.nullable().optional(),
+  description: optionalText(10_000),
+  modelNumber: optionalText(120),
+  gtin: z.string().trim().regex(/^\d{8,14}$/, 'Use an 8 to 14 digit GTIN/barcode.').nullable().optional(),
+  plannedSellingPrice: positiveDecimal.nullable().optional(),
+  plannedPriceCurrency: currency.nullable().optional(),
   status: candidateStatus,
   notes: optionalText(10_000),
 };
+
+function validatePlannedPrice(value, context) {
+  const hasPrice = value.plannedSellingPrice !== undefined && value.plannedSellingPrice !== null;
+  const hasCurrency = value.plannedPriceCurrency !== undefined && value.plannedPriceCurrency !== null;
+  if (hasPrice !== hasCurrency) {
+    context.addIssue({ code: 'custom', path: ['plannedSellingPrice'], message: 'Planned price and currency must be provided together.' });
+  }
+}
 
 export const candidateCreateSchema = requestSchema({
   body: z.object({
     ...candidateFields,
     categoryId: uuid.nullable().optional(),
     status: candidateStatus.default('research'),
-  }).strict(),
+  }).strict().superRefine(validatePlannedPrice),
 });
 
 export const candidatePatchSchema = requestSchema({
@@ -85,9 +100,37 @@ export const candidatePatchSchema = requestSchema({
     name: candidateFields.name.optional(),
     brandName: candidateFields.brandName,
     marketplaceUrl: candidateFields.marketplaceUrl,
+    description: candidateFields.description,
+    modelNumber: candidateFields.modelNumber,
+    gtin: candidateFields.gtin,
+    plannedSellingPrice: candidateFields.plannedSellingPrice,
+    plannedPriceCurrency: candidateFields.plannedPriceCurrency,
     status: candidateStatus.optional(),
     notes: candidateFields.notes,
   }).strict()),
+});
+
+export const quickCaptureCreateSchema = requestSchema({
+  body: z.object({
+    name: z.string().trim().min(1).max(200),
+    supplierId: uuid.nullable().optional(),
+    supplierName: optionalText(200),
+    unitPrice: nonNegativeDecimal,
+    currency: currency.default('EGP'),
+    brandName: optionalText(160),
+    modelNumber: optionalText(120),
+    gtin: z.string().trim().regex(/^\d{8,14}$/, 'Use an 8 to 14 digit GTIN/barcode.').nullable().optional(),
+    categoryId: uuid.nullable().optional(),
+    moq: positiveDecimal.default('1'),
+    warrantyText: optionalText(500),
+    invoiceAvailable: z.boolean().nullable().optional(),
+    notes: optionalText(10_000),
+    photoReference: url.nullable().optional(),
+  }).strict().superRefine((value, context) => {
+    if (!value.supplierId && !value.supplierName) {
+      context.addIssue({ code: 'custom', path: ['supplierName'], message: 'Choose a supplier or enter its name.' });
+    }
+  }),
 });
 
 export const snapshotCreateSchema = requestSchema({
@@ -103,6 +146,12 @@ export const snapshotCreateSchema = requestSchema({
     demandScore: score.optional(),
     competitionScore: score.optional(),
     evidenceNotes: optionalText(10_000),
+    listingTitle: optionalText(500),
+    sellerBrand: optionalText(200),
+    originalPrice: nonNegativeDecimal.nullable().optional(),
+    recentSalesSignal: optionalText(240),
+    bestsellerRankText: optionalText(240),
+    fulfillmentBadge: optionalText(120),
   }).strict(),
 });
 
@@ -118,6 +167,18 @@ const supplierOptionFields = {
   quoteValidUntil: isoDate.nullable().optional(),
   preferred: z.boolean(),
   notes: optionalText(10_000),
+  modelVariant: optionalText(200),
+  samePriceAllQuantities: z.boolean().default(true),
+  priceQty1: nonNegativeDecimal.nullable().optional(),
+  priceQty5: nonNegativeDecimal.nullable().optional(),
+  priceQty10: nonNegativeDecimal.nullable().optional(),
+  priceQty20: nonNegativeDecimal.nullable().optional(),
+  priceQty50: nonNegativeDecimal.nullable().optional(),
+  priceQty100: nonNegativeDecimal.nullable().optional(),
+  warrantyText: optionalText(500),
+  defectiveUnitReplacement: z.boolean().nullable().optional(),
+  invoiceAvailable: z.boolean().nullable().optional(),
+  sampleAvailable: z.boolean().nullable().optional(),
 };
 
 function validateSupplierOption(value, context) {
@@ -148,6 +209,18 @@ export const supplierOptionPatchSchema = requestSchema({
     quoteValidUntil: supplierOptionFields.quoteValidUntil,
     preferred: z.boolean().optional(),
     notes: supplierOptionFields.notes,
+    modelVariant: supplierOptionFields.modelVariant,
+    samePriceAllQuantities: z.boolean().optional(),
+    priceQty1: supplierOptionFields.priceQty1,
+    priceQty5: supplierOptionFields.priceQty5,
+    priceQty10: supplierOptionFields.priceQty10,
+    priceQty20: supplierOptionFields.priceQty20,
+    priceQty50: supplierOptionFields.priceQty50,
+    priceQty100: supplierOptionFields.priceQty100,
+    warrantyText: supplierOptionFields.warrantyText,
+    defectiveUnitReplacement: supplierOptionFields.defectiveUnitReplacement,
+    invoiceAvailable: supplierOptionFields.invoiceAvailable,
+    sampleAvailable: supplierOptionFields.sampleAvailable,
   }).strict()),
 });
 
@@ -166,6 +239,7 @@ const sampleFields = {
   sampleCost: nonNegativeDecimal.nullable().optional(),
   currency: currency.nullable().optional(),
   result: z.enum(['pending', 'pass', 'fail', 'retest']),
+  workflowState: sampleWorkflowState.optional(),
   checklist: z.array(checklistItem).max(100),
   notes: optionalText(10_000),
 };
@@ -185,6 +259,7 @@ export const samplePatchSchema = requestSchema({
     sampleCost: sampleFields.sampleCost,
     currency: sampleFields.currency,
     result: sampleFields.result.optional(),
+    workflowState: sampleWorkflowState.optional(),
     checklist: sampleFields.checklist.optional(),
     notes: sampleFields.notes,
   }).strict()),
@@ -193,6 +268,7 @@ export const samplePatchSchema = requestSchema({
 export const economicsCreateSchema = requestSchema({
   params: z.object({ id: uuid }).strict(),
   body: z.object({
+    supplierOptionId: uuid.nullable().optional(),
     currency,
     sellingPrice: positiveDecimal,
     supplierUnitCost: nonNegativeDecimal,

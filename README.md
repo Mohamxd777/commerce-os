@@ -1,6 +1,6 @@
 # Commerce OS
 
-Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog. Task 3 adds suppliers and purchasing. Task 4 adds an immutable inventory ledger and stock control. Task 5 adds product research, market/supplier evidence, flexible sample evaluation, unit economics, launch decisions, capital planning, candidate comparison, and explicit catalog conversion.
+Commerce OS is a readable, production-oriented foundation for a long-term commerce management system. Task 1 provides secure identity, organizations, permissions, and locations. Task 2 adds an organization-isolated product catalog. Task 3 adds suppliers and purchasing. Task 4 adds an immutable inventory ledger and stock control. Task 5 adds the product research domain, economics, decisions, comparison, and explicit catalog conversion. Task 6 turns that domain into a focused sourcing workspace with Quick Capture and a guided Noon Egypt research workflow.
 
 Sales, accounting, inventory valuation, landed-cost allocation, marketplace integrations, and physical serial-number instances remain intentionally deferred.
 
@@ -194,7 +194,7 @@ Candidate → market and supplier evidence → sample → unit economics → lau
 Approved candidate → explicit reviewed transaction → draft Product + Variant + SKU
 ```
 
-The Research navigation provides a dashboard, paginated candidate pipeline, detailed evidence workspace, selected-candidate comparison, and organization launch settings. Monetary calculations use PostgreSQL `NUMERIC`, fee assumptions preserve effective history and sources, and capital warnings use each candidate's latest structured evaluation. Conversion never creates stock, a supplier-product relationship, or a purchase order.
+The Product Research navigation now opens a focused Task 6 workspace with fast search/filters, mobile Quick Capture, a seven-stage workflow indicator, and candidate tabs for Overview, Suppliers, Marketplace, Economics, Samples, and Decision. Supplier quantity tiers do not require repeated input when prices are identical; manual Noon observations remain distinct from the planned selling price. Monetary calculations still use Task 5 PostgreSQL `NUMERIC` logic. Conversion never creates stock, a supplier-product relationship, or a purchase order.
 
 See [`docs/product-research.md`](docs/product-research.md) for formulas, status transitions, tables, permissions, API routes, comparison rules, capital allocation, and conversion behavior.
 
@@ -232,7 +232,7 @@ npm run test
 npm run build
 ```
 
-Current tests cover reusable business terms, catalog and purchasing workflows, inventory ledger safety, and the research workflow: decimal economics, evidence histories, samples, decisions, budget warnings, selected comparison, status transitions, permissions, organization isolation, and atomic non-duplicate catalog conversion.
+Current tests cover reusable business terms, catalog and purchasing workflows, inventory ledger safety, and the research workflow: Quick Capture, supplier quantity pricing/comparison, multiple Noon observations, planned price separation, selected-supplier economics, sample states, decisions, permissions, organization isolation, and atomic non-duplicate catalog conversion.
 
 ## Project structure
 

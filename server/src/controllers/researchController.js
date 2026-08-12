@@ -12,6 +12,13 @@ export async function createCandidate(request, response) {
   response.status(201).json({ data: result });
 }
 
+export async function quickCapture(request, response) {
+  const result = await researchService.quickCapture(
+    request.organizationId, request.user.id, request.validated.body,
+  );
+  response.status(201).json({ data: result });
+}
+
 export async function getCandidate(request, response) {
   const result = await researchService.getCandidate(
     request.organizationId, request.validated.params.id,

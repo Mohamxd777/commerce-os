@@ -5,6 +5,8 @@ export const researchApi = {
     apiRequest('/research/candidates?' + queryString({ page: 1, limit: 25, ...parameters }), { organizationId }),
   createCandidate: (organizationId, body) =>
     apiRequest('/research/candidates', { organizationId, method: 'POST', body }),
+  quickCapture: (organizationId, body) =>
+    apiRequest('/research/quick-capture', { organizationId, method: 'POST', body }),
   getCandidate: (organizationId, id) =>
     apiRequest('/research/candidates/' + id, { organizationId }),
   patchCandidate: (organizationId, id, body) =>

@@ -32,10 +32,11 @@ const navigationGroups = [
     ],
   },
   {
-    label: 'Research',
+    label: 'Product Research',
     items: [
-      ['Dashboard', '#research'],
-      ['Candidates', '#research/candidates'],
+      ['Workspace', '#research'],
+      ['Quick Capture', '#research/quick-capture'],
+      ['Summary', '#research/overview'],
       ['Comparison', '#research/comparison'],
       ['Launch Settings', '#research/settings'],
     ],
@@ -63,7 +64,7 @@ export default function AppLayout({
                 {group.items.map(([label, href]) => {
                   const route = href.slice(1);
                   const active = activeRoute === route
-                    || (route !== 'inventory' && activeRoute.startsWith(route + '/'));
+                    || (!['inventory', 'research'].includes(route) && activeRoute.startsWith(route + '/'));
                   return (
                     <li key={label}>
                       <a className={active ? 'active' : ''} href={href}>

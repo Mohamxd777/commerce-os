@@ -3,6 +3,8 @@ import { updateCatalogRecord } from './catalogModelHelpers.js';
 const candidateSelect = `
   SELECT candidate.id, candidate.organization_id, candidate.category_id,
          candidate.name, candidate.brand_name, candidate.marketplace_url,
+         candidate.description, candidate.model_number, candidate.gtin,
+         candidate.planned_selling_price, candidate.planned_price_currency,
          candidate.status, candidate.notes, candidate.catalog_product_id,
          candidate.converted_at, candidate.created_at, candidate.updated_at,
          category.name AS category_name,
@@ -10,19 +12,35 @@ const candidateSelect = `
          latest_snapshot.currency AS market_currency,
          latest_snapshot.rating, latest_snapshot.review_count,
          latest_snapshot.demand_score, latest_snapshot.competition_score,
+         market_summary.minimum_observed_price, market_summary.median_observed_price,
+         market_summary.observation_count,
          preferred_supplier.id AS preferred_supplier_option_id,
          COALESCE(preferred_supplier.supplier_name, preferred_supplier.lead_name) AS preferred_supplier_name,
          preferred_supplier.quoted_unit_cost, preferred_supplier.currency AS supplier_currency,
          preferred_supplier.moq,
          preferred_supplier.lead_time_days,
+         cheapest_supplier.id AS cheapest_supplier_option_id,
+         COALESCE(cheapest_supplier.supplier_name, cheapest_supplier.lead_name) AS cheapest_supplier_name,
+         cheapest_supplier.quoted_unit_cost AS cheapest_unit_cost,
+         cheapest_supplier.currency AS cheapest_supplier_currency,
          latest_sample.result AS sample_result,
+         latest_sample.workflow_state AS sample_state,
          latest_economics.net_margin_percentage,
          latest_economics.roi_percentage,
          latest_economics.net_contribution,
          latest_evaluation.recommendation,
          latest_evaluation.risk_level,
          latest_evaluation.planned_capital,
-         latest_evaluation.projected_profit
+         latest_evaluation.projected_profit,
+         CASE
+           WHEN candidate.status = 'launched' THEN 'sku'
+           WHEN candidate.status IN ('approved', 'rejected') OR latest_evaluation.recommendation IS NOT NULL THEN 'decision'
+           WHEN latest_sample.workflow_state IS NOT NULL THEN 'sample'
+           WHEN latest_economics.net_margin_percentage IS NOT NULL THEN 'economics'
+           WHEN market_summary.observation_count > 0 THEN 'market'
+           WHEN cheapest_supplier.id IS NOT NULL THEN 'supplier'
+           ELSE 'idea'
+         END AS current_stage
   FROM product_candidates AS candidate
   LEFT JOIN categories AS category
     ON category.id = candidate.category_id
@@ -34,6 +52,15 @@ const candidateSelect = `
     ORDER BY snapshot.observed_at DESC, snapshot.created_at DESC LIMIT 1
   ) AS latest_snapshot ON TRUE
   LEFT JOIN LATERAL (
+    SELECT MIN(snapshot.selling_price) AS minimum_observed_price,
+           PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY snapshot.selling_price)::numeric(19, 4)
+             AS median_observed_price,
+           COUNT(*)::int AS observation_count
+    FROM product_candidate_market_snapshots AS snapshot
+    WHERE snapshot.candidate_id = candidate.id
+      AND snapshot.organization_id = candidate.organization_id
+  ) AS market_summary ON TRUE
+  LEFT JOIN LATERAL (
     SELECT option.*, supplier.name AS supplier_name
     FROM candidate_supplier_options AS option
     LEFT JOIN suppliers AS supplier
@@ -41,10 +68,21 @@ const candidateSelect = `
      AND supplier.organization_id = option.organization_id
     WHERE option.candidate_id = candidate.id
       AND option.organization_id = candidate.organization_id
-    ORDER BY option.preferred DESC, option.quoted_unit_cost, option.created_at LIMIT 1
+      AND option.preferred = TRUE
+    ORDER BY option.created_at LIMIT 1
   ) AS preferred_supplier ON TRUE
   LEFT JOIN LATERAL (
-    SELECT sample.result FROM product_samples AS sample
+    SELECT option.*, supplier.name AS supplier_name
+    FROM candidate_supplier_options AS option
+    LEFT JOIN suppliers AS supplier
+      ON supplier.id = option.supplier_id
+     AND supplier.organization_id = option.organization_id
+    WHERE option.candidate_id = candidate.id
+      AND option.organization_id = candidate.organization_id
+    ORDER BY option.quoted_unit_cost, option.created_at LIMIT 1
+  ) AS cheapest_supplier ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT sample.result, sample.workflow_state FROM product_samples AS sample
     WHERE sample.candidate_id = candidate.id
       AND sample.organization_id = candidate.organization_id
     ORDER BY sample.created_at DESC LIMIT 1
@@ -77,19 +115,28 @@ export async function listCandidates(database, input) {
     input.risk ?? null,
     input.supplier ?? null,
     input.sample ?? null,
+    input.supplierId ?? null,
   ];
   const filters = `
     WHERE candidate.organization_id = $1
       AND ($2::text IS NULL OR candidate.name ILIKE $2 OR candidate.brand_name ILIKE $2
+        OR candidate.model_number ILIKE $2 OR candidate.gtin ILIKE $2
         OR candidate.marketplace_url ILIKE $2 OR candidate.notes ILIKE $2
-        OR latest_snapshot.listing_url ILIKE $2
+        OR latest_snapshot.listing_url ILIKE $2 OR latest_snapshot.listing_title ILIKE $2
+        OR latest_snapshot.seller_brand ILIKE $2
         OR preferred_supplier.supplier_name ILIKE $2 OR preferred_supplier.lead_name ILIKE $2)
       AND ($3::text IS NULL OR candidate.status = $3)
       AND ($4::uuid IS NULL OR candidate.category_id = $4)
       AND ($5::text IS NULL OR latest_evaluation.recommendation = $5)
       AND ($6::text IS NULL OR latest_evaluation.risk_level = $6)
-      AND ($7::boolean IS NULL OR (preferred_supplier.id IS NOT NULL) = $7)
-      AND ($8::boolean IS NULL OR (latest_sample.result IS NOT NULL) = $8)`;
+      AND ($7::boolean IS NULL OR (cheapest_supplier.id IS NOT NULL) = $7)
+      AND ($8::boolean IS NULL OR (latest_sample.result IS NOT NULL) = $8)
+      AND ($9::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM candidate_supplier_options AS supplier_filter
+        WHERE supplier_filter.organization_id = candidate.organization_id
+          AND supplier_filter.candidate_id = candidate.id
+          AND supplier_filter.supplier_id = $9
+      ))`;
 
   const count = await database.query(
     `SELECT COUNT(*)::int AS total FROM (${candidateSelect} ${filters}) AS filtered`,
@@ -99,7 +146,7 @@ export async function listCandidates(database, input) {
   const result = await database.query(
     `${candidateSelect} ${filters}
      ORDER BY candidate.updated_at DESC, candidate.id
-     LIMIT $9 OFFSET $10`,
+     LIMIT $10 OFFSET $11`,
     [...parameters, input.limit, offset],
   );
   return { rows: result.rows, total: count.rows[0].total };
@@ -119,12 +166,15 @@ export async function createCandidate(database, input) {
   const result = await database.query(
     `INSERT INTO product_candidates (
        organization_id, category_id, name, brand_name, marketplace_url,
-       status, notes, created_by
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       description, model_number, gtin, planned_selling_price,
+       planned_price_currency, status, notes, created_by
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [input.organizationId, input.categoryId ?? null, input.name,
-      input.brandName ?? null, input.marketplaceUrl ?? null, input.status,
-      input.notes ?? null, input.userId],
+      input.brandName ?? null, input.marketplaceUrl ?? null,
+      input.description ?? null, input.modelNumber ?? null, input.gtin ?? null,
+      input.plannedSellingPrice ?? null, input.plannedPriceCurrency ?? null,
+      input.status, input.notes ?? null, input.userId],
   );
   return result.rows[0];
 }
@@ -148,13 +198,19 @@ export async function createSnapshot(database, input) {
     `INSERT INTO product_candidate_market_snapshots (
        organization_id, candidate_id, marketplace, listing_url, observed_at,
        selling_price, currency, rating, review_count, demand_score,
-       competition_score, evidence_notes, created_by
-     ) VALUES ($1, $2, $3, $4, COALESCE($5, NOW()), $6, $7, $8, $9, $10, $11, $12, $13)
+       competition_score, evidence_notes, listing_title, seller_brand,
+       original_price, recent_sales_signal, bestseller_rank_text,
+       fulfillment_badge, created_by
+     ) VALUES ($1, $2, $3, $4, COALESCE($5, NOW()), $6, $7, $8, $9, $10,
+       $11, $12, $13, $14, $15, $16, $17, $18, $19)
      RETURNING *`,
     [input.organizationId, input.candidateId, input.marketplace, input.listingUrl,
       input.observedAt ?? null, input.sellingPrice ?? null, input.currency ?? null,
       input.rating ?? null, input.reviewCount ?? null, input.demandScore ?? null,
-      input.competitionScore ?? null, input.evidenceNotes ?? null, input.userId],
+      input.competitionScore ?? null, input.evidenceNotes ?? null,
+      input.listingTitle ?? null, input.sellerBrand ?? null,
+      input.originalPrice ?? null, input.recentSalesSignal ?? null,
+      input.bestsellerRankText ?? null, input.fulfillmentBadge ?? null, input.userId],
   );
   return result.rows[0];
 }
@@ -196,13 +252,22 @@ export async function createSupplierOption(database, input) {
     `INSERT INTO candidate_supplier_options (
        organization_id, candidate_id, supplier_id, lead_name, contact_url,
        quoted_unit_cost, currency, moq, lead_time_days, quote_date,
-       quote_valid_until, preferred, notes
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       quote_valid_until, preferred, notes, model_variant,
+       same_price_all_quantities, price_qty_1, price_qty_5, price_qty_10,
+       price_qty_20, price_qty_50, price_qty_100, warranty_text,
+       defective_unit_replacement, invoice_available, sample_available
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+       $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
      RETURNING *`,
     [input.organizationId, input.candidateId, input.supplierId ?? null,
       input.leadName ?? null, input.contactUrl ?? null, input.quotedUnitCost,
       input.currency, input.moq, input.leadTimeDays, input.quoteDate ?? null,
-      input.quoteValidUntil ?? null, input.preferred, input.notes ?? null],
+      input.quoteValidUntil ?? null, input.preferred, input.notes ?? null,
+      input.modelVariant ?? null, input.samePriceAllQuantities,
+      input.priceQty1 ?? null, input.priceQty5 ?? null, input.priceQty10 ?? null,
+      input.priceQty20 ?? null, input.priceQty50 ?? null, input.priceQty100 ?? null,
+      input.warrantyText ?? null, input.defectiveUnitReplacement ?? null,
+      input.invoiceAvailable ?? null, input.sampleAvailable ?? null],
   );
   return result.rows[0];
 }
@@ -228,20 +293,23 @@ export async function findSample(database, { organizationId, id }) {
 }
 
 export async function createSample(database, input) {
-  const evaluated = input.result !== 'pending';
+  const workflowState = input.workflowState ?? ({ pass: 'passed', fail: 'failed' }[input.result] || 'not_requested');
+  const storedResult = workflowState === 'passed' ? 'pass' : workflowState === 'failed' ? 'fail' : input.result;
+  const evaluated = storedResult !== 'pending';
   const result = await database.query(
     `INSERT INTO product_samples (
        organization_id, candidate_id, supplier_option_id, reference_code,
        ordered_at, received_at, sample_cost, currency, result, checklist,
-       notes, evaluated_by, evaluated_at, created_by
+       notes, evaluated_by, evaluated_at, created_by, workflow_state
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11,
        CASE WHEN $12 THEN $13::uuid ELSE NULL END,
-       CASE WHEN $12 THEN NOW() ELSE NULL END, $13)
+       CASE WHEN $12 THEN NOW() ELSE NULL END, $13, $14)
      RETURNING *`,
     [input.organizationId, input.candidateId, input.supplierOptionId ?? null,
       input.referenceCode ?? null, input.orderedAt ?? null, input.receivedAt ?? null,
-      input.sampleCost ?? null, input.currency ?? null, input.result,
-      JSON.stringify(input.checklist), input.notes ?? null, evaluated, input.userId],
+      input.sampleCost ?? null, input.currency ?? null, storedResult,
+      JSON.stringify(input.checklist), input.notes ?? null, evaluated, input.userId,
+      workflowState],
   );
   return result.rows[0];
 }
@@ -309,7 +377,7 @@ export async function calculateAndStoreEconomics(database, input) {
        FROM costs
      )
      INSERT INTO candidate_unit_economics (
-       organization_id, candidate_id, currency, selling_price, supplier_unit_cost,
+       organization_id, candidate_id, supplier_option_id, currency, selling_price, supplier_unit_cost,
        local_transport_cost, packaging_cost, referral_fee_percentage,
        referral_fee_fixed, fulfillment_fee, shipping_reimbursement,
        advertising_cost, estimated_return_reserve, other_variable_costs,
@@ -318,7 +386,7 @@ export async function calculateAndStoreEconomics(database, input) {
        break_even_price, max_purchase_price_for_target_margin,
        max_purchase_price_for_target_roi, created_by
      )
-     SELECT organization_id, candidate_id, currency, selling_price, supplier_unit_cost,
+     SELECT organization_id, candidate_id, $18::uuid, currency, selling_price, supplier_unit_cost,
        local_transport_cost, packaging_cost, referral_fee_percentage,
        referral_fee_fixed, fulfillment_fee, shipping_reimbursement,
        advertising_cost, estimated_return_reserve, other_variable_costs,
@@ -341,7 +409,8 @@ export async function calculateAndStoreEconomics(database, input) {
       input.referralFeePercentage, input.referralFeeFixed, input.fulfillmentFee,
       input.shippingReimbursement, input.advertisingCost,
       input.estimatedReturnReserve, input.otherVariableCosts,
-      input.targetMarginPercentage ?? null, input.targetRoiPercentage ?? null, input.userId],
+      input.targetMarginPercentage ?? null, input.targetRoiPercentage ?? null, input.userId,
+      input.supplierOptionId ?? null],
   );
   return result.rows[0];
 }

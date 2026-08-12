@@ -13,6 +13,15 @@ const transitions = {
   launched: new Set(),
 };
 
+const sampleTransitions = {
+  not_requested: new Set(['requested']),
+  requested: new Set(['purchased', 'not_requested']),
+  purchased: new Set(['testing', 'requested']),
+  testing: new Set(['passed', 'failed']),
+  passed: new Set(['testing']),
+  failed: new Set(['testing', 'requested']),
+};
+
 async function requireCandidate(database, organizationId, candidateId, forUpdate = false) {
   const candidate = await researchModel.findCandidate(database, {
     organizationId, id: candidateId, forUpdate,
@@ -109,6 +118,60 @@ export async function createCandidate(organizationId, userId, input) {
   }
 }
 
+export async function quickCapture(organizationId, userId, input) {
+  const database = await pool.connect();
+  try {
+    await database.query('BEGIN');
+    await requireCategory(database, organizationId, input.categoryId);
+    await requireSupplier(database, organizationId, input.supplierId);
+    const candidate = await researchModel.createCandidate(database, {
+      organizationId,
+      userId,
+      categoryId: input.categoryId,
+      name: input.name,
+      brandName: input.brandName,
+      modelNumber: input.modelNumber,
+      gtin: input.gtin,
+      description: input.name,
+      status: 'research',
+      notes: input.notes,
+    });
+    await researchModel.createSupplierOption(database, {
+      organizationId,
+      candidateId: candidate.id,
+      supplierId: input.supplierId,
+      leadName: input.supplierName,
+      quotedUnitCost: input.unitPrice,
+      currency: input.currency,
+      moq: input.moq,
+      leadTimeDays: 0,
+      preferred: true,
+      modelVariant: input.modelNumber,
+      samePriceAllQuantities: true,
+      warrantyText: input.warrantyText,
+      invoiceAvailable: input.invoiceAvailable,
+      notes: input.notes,
+    });
+    if (input.photoReference) {
+      await researchModel.createEvidence(database, {
+        organizationId,
+        candidateId: candidate.id,
+        userId,
+        evidenceType: 'url',
+        title: 'Quick capture photo reference',
+        sourceUrl: input.photoReference,
+      });
+    }
+    await database.query('COMMIT');
+    return getCandidate(organizationId, candidate.id);
+  } catch (error) {
+    await database.query('ROLLBACK');
+    throw databaseError(error);
+  } finally {
+    database.release();
+  }
+}
+
 export async function patchCandidate(organizationId, id, input) {
   const candidate = await requireCandidate(pool, organizationId, id);
   await requireCategory(pool, organizationId, input.categoryId);
@@ -121,11 +184,22 @@ export async function patchCandidate(organizationId, id, input) {
   }
   const fieldMap = {
     categoryId: 'category_id', name: 'name', brandName: 'brand_name',
-    marketplaceUrl: 'marketplace_url', status: 'status', notes: 'notes',
+    marketplaceUrl: 'marketplace_url', description: 'description',
+    modelNumber: 'model_number', gtin: 'gtin',
+    plannedSellingPrice: 'planned_selling_price',
+    plannedPriceCurrency: 'planned_price_currency',
+    status: 'status', notes: 'notes',
   };
   const changes = {};
   for (const [field, column] of Object.entries(fieldMap)) {
     if (input[field] !== undefined) changes[column] = input[field];
+  }
+  const plannedPrice = input.plannedSellingPrice !== undefined
+    ? input.plannedSellingPrice : candidate.planned_selling_price;
+  const plannedCurrency = input.plannedPriceCurrency !== undefined
+    ? input.plannedPriceCurrency : candidate.planned_price_currency;
+  if ((plannedPrice === null) !== (plannedCurrency === null)) {
+    throw new AppError(400, 'RESEARCH_PLANNED_PRICE_INCOMPLETE', 'Planned selling price and currency must be saved together.');
   }
   try {
     await researchModel.updateCandidate(pool, { organizationId, id, changes });
@@ -169,10 +243,21 @@ export async function patchSupplierOption(organizationId, id, input) {
     quotedUnitCost: 'quoted_unit_cost', currency: 'currency', moq: 'moq',
     leadTimeDays: 'lead_time_days', quoteDate: 'quote_date',
     quoteValidUntil: 'quote_valid_until', preferred: 'preferred', notes: 'notes',
+    modelVariant: 'model_variant', samePriceAllQuantities: 'same_price_all_quantities',
+    priceQty1: 'price_qty_1', priceQty5: 'price_qty_5',
+    priceQty10: 'price_qty_10', priceQty20: 'price_qty_20',
+    priceQty50: 'price_qty_50', priceQty100: 'price_qty_100',
+    warrantyText: 'warranty_text', defectiveUnitReplacement: 'defective_unit_replacement',
+    invoiceAvailable: 'invoice_available', sampleAvailable: 'sample_available',
   };
   const changes = {};
   for (const [field, column] of Object.entries(fieldMap)) {
     if (input[field] !== undefined) changes[column] = input[field];
+  }
+  if (input.samePriceAllQuantities === true) {
+    for (const column of ['price_qty_1', 'price_qty_5', 'price_qty_10', 'price_qty_20', 'price_qty_50', 'price_qty_100']) {
+      changes[column] = null;
+    }
   }
   try {
     return await researchModel.updateSupplierOption(pool, {
@@ -208,10 +293,21 @@ export async function patchSample(organizationId, id, userId, input) {
   const sample = await researchModel.findSample(pool, { organizationId, id });
   if (!sample) throw new AppError(404, 'RESEARCH_SAMPLE_NOT_FOUND', 'Sample not found.');
   await requireCandidateSupplierOption(organizationId, sample.candidate_id, input.supplierOptionId);
+  const requestedState = input.workflowState
+    ?? (input.result === 'pass' ? 'passed' : input.result === 'fail' ? 'failed' : undefined);
+  if (requestedState && requestedState !== sample.workflow_state
+    && !sampleTransitions[sample.workflow_state].has(requestedState)) {
+    throw new AppError(
+      409,
+      'RESEARCH_SAMPLE_TRANSITION_INVALID',
+      `Sample cannot move from ${sample.workflow_state} to ${requestedState}.`,
+    );
+  }
   const fieldMap = {
     supplierOptionId: 'supplier_option_id', referenceCode: 'reference_code',
     orderedAt: 'ordered_at', receivedAt: 'received_at', sampleCost: 'sample_cost',
-    currency: 'currency', result: 'result', checklist: 'checklist', notes: 'notes',
+    currency: 'currency', result: 'result', workflowState: 'workflow_state',
+    checklist: 'checklist', notes: 'notes',
   };
   const changes = {};
   for (const [field, column] of Object.entries(fieldMap)) {
@@ -220,6 +316,12 @@ export async function patchSample(organizationId, id, userId, input) {
   if (input.result !== undefined) {
     changes.evaluated_by = input.result === 'pending' ? null : userId;
     changes.evaluated_at = input.result === 'pending' ? null : new Date();
+  }
+  if (input.workflowState !== undefined) {
+    const terminal = input.workflowState === 'passed' || input.workflowState === 'failed';
+    changes.result = input.workflowState === 'passed' ? 'pass' : input.workflowState === 'failed' ? 'fail' : 'pending';
+    changes.evaluated_by = terminal ? userId : null;
+    changes.evaluated_at = terminal ? new Date() : null;
   }
   try {
     return await researchModel.updateSample(pool, { organizationId, id, changes });
@@ -239,10 +341,25 @@ export async function createEvidence(organizationId, candidateId, userId, input)
 }
 
 export async function calculateEconomics(organizationId, candidateId, userId, input) {
-  await requireCandidate(pool, organizationId, candidateId);
+  const candidate = await requireCandidate(pool, organizationId, candidateId);
+  let authoritativeInput = input;
+  if (input.supplierOptionId) {
+    const option = await researchModel.findSupplierOption(pool, {
+      organizationId, id: input.supplierOptionId,
+    });
+    if (!option || option.candidate_id !== candidateId) {
+      throw new AppError(400, 'RESEARCH_ECONOMICS_SUPPLIER_INVALID', 'Selected supplier option does not belong to this candidate.');
+    }
+    authoritativeInput = {
+      ...input,
+      supplierUnitCost: option.quoted_unit_cost,
+      sellingPrice: candidate.planned_selling_price ?? input.sellingPrice,
+      currency: candidate.planned_price_currency ?? input.currency,
+    };
+  }
   try {
     return await researchModel.calculateAndStoreEconomics(pool, {
-      organizationId, candidateId, userId, ...input,
+      organizationId, candidateId, userId, ...authoritativeInput,
     });
   } catch (error) {
     throw databaseError(error);

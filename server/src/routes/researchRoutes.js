@@ -8,7 +8,7 @@ import {
   candidateCreateSchema, candidateListSchema, candidatePatchSchema,
   comparisonSchema, createProductFromCandidateSchema, economicsCreateSchema,
   evaluationCreateSchema, evidenceCreateSchema, feeAssumptionCreateSchema,
-  researchIdSchema, researchSummarySchema, sampleCreateSchema, samplePatchSchema,
+  quickCaptureCreateSchema, researchIdSchema, researchSummarySchema, sampleCreateSchema, samplePatchSchema,
   settingsPatchSchema, snapshotCreateSchema, supplierOptionCreateSchema,
   supplierOptionPatchSchema,
 } from '../validators/researchValidators.js';
@@ -19,6 +19,7 @@ researchRouter.use('/research', authenticate);
 
 researchRouter.get('/research/candidates', authorize('research.read'), validate(candidateListSchema), asyncHandler(researchController.listCandidates));
 researchRouter.post('/research/candidates', authorize('research.manage'), validate(candidateCreateSchema), asyncHandler(researchController.createCandidate));
+researchRouter.post('/research/quick-capture', authorize('research.manage'), validate(quickCaptureCreateSchema), asyncHandler(researchController.quickCapture));
 researchRouter.get('/research/candidates/:id', authorize('research.read'), validate(researchIdSchema), asyncHandler(researchController.getCandidate));
 researchRouter.patch('/research/candidates/:id', authorize('research.manage'), validate(candidatePatchSchema), asyncHandler(researchController.patchCandidate));
 

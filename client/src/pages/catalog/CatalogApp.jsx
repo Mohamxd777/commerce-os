@@ -35,6 +35,7 @@ import ResearchCandidateFormPage from '../research/ResearchCandidateFormPage.jsx
 import ResearchCandidatesPage from '../research/ResearchCandidatesPage.jsx';
 import ResearchComparisonPage from '../research/ResearchComparisonPage.jsx';
 import ResearchOverviewPage from '../research/ResearchOverviewPage.jsx';
+import ResearchQuickCapturePage from '../research/ResearchQuickCapturePage.jsx';
 import ResearchSettingsPage from '../research/ResearchSettingsPage.jsx';
 
 function useHashRoute() {
@@ -214,9 +215,11 @@ export default function CatalogApp() {
   } else if (route === 'inventory/reorder-rules') page = <InventoryReorderRulesPage organizationId={organizationId} />;
   else if (/^inventory\/skus\/[^/]+$/.test(route)) {
     page = <SkuInventoryDetailPage organizationId={organizationId} skuId={route.split('/')[2]} />;
-  } else if (route === 'research') page = <ResearchOverviewPage organizationId={organizationId} />;
+  } else if (route === 'research') page = <ResearchCandidatesPage organizationId={organizationId} />;
+  else if (route === 'research/overview') page = <ResearchOverviewPage organizationId={organizationId} />;
   else if (route === 'research/candidates') page = <ResearchCandidatesPage organizationId={organizationId} />;
   else if (route === 'research/candidates/new') page = <ResearchCandidateFormPage organizationId={organizationId} />;
+  else if (route === 'research/quick-capture') page = <ResearchQuickCapturePage organizationId={organizationId} />;
   else if (/^research\/candidates\/[^/]+$/.test(route)) {
     page = <ResearchCandidateDetailPage organizationId={organizationId} candidateId={route.split('/')[2]} />;
   } else if (route === 'research/comparison') {
