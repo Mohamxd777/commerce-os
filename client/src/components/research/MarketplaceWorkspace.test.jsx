@@ -30,8 +30,34 @@ describe('MarketplaceWorkspace', () => {
     fireEvent.change(screen.getByLabelText('Noon product URL'), { target: { value: 'https://www.noon.com/item/p/' } });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze URL' }));
     expect(await screen.findByDisplayValue('Auto hub')).toBeInTheDocument();
+    expect(screen.getByText('Some data could not be extracted.')).toBeInTheDocument();
     expect(screen.getAllByText('Auto').length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText(/Selling price/), { target: { value: '245' } });
     expect(screen.getAllByText('User edited').length).toBeGreaterThan(0);
+  });
+
+  it('shows a friendly analyzer error and keeps manual entry usable after failure', async () => {
+    const onAnalyze = vi.fn().mockRejectedValue(Object.assign(new Error('raw backend message'), {
+      code: 'NOON_ANALYZE_FAILED',
+      details: { reason: 'blocked', upstreamStatus: 403 },
+    }));
+    const onAddObservation = vi.fn();
+    render(<MarketplaceWorkspace candidate={{ snapshots: [], observation_count: 0 }} onAnalyze={onAnalyze} onAddObservation={onAddObservation} onSavePlannedPrice={vi.fn()} />);
+    const noonUrl = 'https://www.noon.com/egypt-en/example/p/';
+    fireEvent.change(screen.getByLabelText('Noon product URL'), { target: { value: noonUrl } });
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze URL' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The analyzer was blocked by Noon.');
+    const manualUrl = screen.getByLabelText('Listing URL');
+    expect(manualUrl).toBeEnabled();
+    expect(manualUrl).toHaveValue(noonUrl);
+    fireEvent.change(screen.getByLabelText('Listing title'), { target: { value: 'Manual fallback listing' } });
+    fireEvent.change(screen.getByLabelText('Selling price'), { target: { value: '299' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add observation' }));
+    expect(onAddObservation).toHaveBeenCalledWith(expect.objectContaining({
+      listingUrl: noonUrl,
+      listingTitle: 'Manual fallback listing',
+      sellingPrice: '299',
+    }), []);
   });
 });

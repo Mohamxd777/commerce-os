@@ -50,7 +50,7 @@ export const researchIdSchema = requestSchema({
 });
 
 export const noonAnalyzeSchema = requestSchema({
-  body: z.object({ url }).strict(),
+  body: z.object({ url: z.string().trim().min(1).max(1000) }).strict(),
 });
 
 export const candidateListSchema = requestSchema({

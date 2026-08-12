@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { noonAnalyzerErrorMessage } from '../../api/researchApi.js';
 import { money } from './ResearchTerms.js';
 import ImageGallery from './ImageGallery.jsx';
 
@@ -64,7 +65,15 @@ export default function MarketplaceWorkspace({ organizationId, candidate, onAnal
         modelNumber: values.model || '', gtin: values.gtin || '',
       }));
       setSelectedImages(values.imageUrls || []);
-    } catch (requestError) { setAnalyzerError(requestError.message); setAnalysis(null); }
+    } catch (requestError) {
+      setAnalyzerError(noonAnalyzerErrorMessage(requestError));
+      setAnalysis(null);
+      setSelectedImages([]);
+      setForm((current) => ({
+        ...current,
+        listingUrl: current.listingUrl || analyzerUrl,
+      }));
+    }
     finally { setAnalyzing(false); }
   }
 
@@ -124,7 +133,7 @@ export default function MarketplaceWorkspace({ organizationId, candidate, onAnal
         <form className="analyzer-row" onSubmit={analyze}><label>Noon product URL<input required type="url" value={analyzerUrl} onChange={(event) => setAnalyzerUrl(event.target.value)} placeholder="https://www.noon.com/egypt-en/..." /></label><button className="primary-button" disabled={analyzing}>{analyzing ? 'Analyzing…' : 'Analyze URL'}</button></form>
         <p className="form-note">Nothing is saved until you review the preview and choose “Add observation.” Analyze additional links one at a time to build the price range.</p>
         {analyzerError && <p className="form-error" role="alert">{analyzerError}</p>}
-        {analysis && <div className="analysis-summary"><strong>Preview ready</strong><span>{analysis.notFound.length} fields not found</span>{analysis.warnings.map((warning) => <small key={warning}>{warning}</small>)}</div>}
+        {analysis && <div className="analysis-summary"><strong>Preview ready</strong><span>{analysis.notFound.length} fields not found</span>{analysis.notFound.length > 0 && <small>Some data could not be extracted.</small>}{analysis.warnings.map((warning) => <small key={warning}>{warning}</small>)}</div>}
       </section>
 
       <section className="workspace-card">

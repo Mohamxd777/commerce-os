@@ -1,4 +1,3 @@
-import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 
 export function notFound(request, _response, next) {
@@ -26,10 +25,6 @@ export function errorHandler(error, request, response, _next) {
 
   if (isKnownError && error.details) {
     payload.error.details = error.details;
-  }
-
-  if (env.NODE_ENV === 'development' && !isKnownError) {
-    payload.error.stack = error.stack;
   }
 
   response.status(statusCode).json(payload);

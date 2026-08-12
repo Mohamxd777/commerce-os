@@ -1,5 +1,20 @@
 import { apiRequest, queryString } from './catalogApi.js';
 
+const transportFailureCodes = new Set([
+  'NETWORK_ERROR', 'EMPTY_RESPONSE', 'NON_JSON_RESPONSE', 'MALFORMED_JSON_RESPONSE',
+  'RESPONSE_BODY_READ_FAILED',
+]);
+
+export function noonAnalyzerErrorMessage(error) {
+  if (transportFailureCodes.has(error?.code)) return 'Noon could not be reached. Try again.';
+  const reason = error?.details?.reason;
+  if (reason === 'blocked') return 'The analyzer was blocked by Noon.';
+  if (['timeout', 'unreachable', 'upstream_error'].includes(reason)) {
+    return 'Noon could not be reached. Try again.';
+  }
+  return 'This Noon page could not be analyzed.';
+}
+
 export const researchApi = {
   listCandidates: (organizationId, parameters = {}) =>
     apiRequest('/research/candidates?' + queryString({ page: 1, limit: 25, ...parameters }), { organizationId }),

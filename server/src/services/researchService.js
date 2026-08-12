@@ -233,8 +233,41 @@ export async function createSnapshot(organizationId, candidateId, userId, input)
   return researchModel.createSnapshot(pool, { organizationId, candidateId, userId, ...input });
 }
 
-export function analyzeNoon(url) {
-  return analyzeNoonUrl(url);
+export function normalizeNoonAnalyzeError(error) {
+  if (error?.code === 'NOON_ANALYZE_FAILED') return error;
+  const invalidCodes = new Set([
+    'INVALID_NOON_URL', 'INVALID_NOON_URL_PROTOCOL', 'NOON_HOST_NOT_ALLOWED',
+    'NOON_URL_CREDENTIALS_NOT_ALLOWED', 'NOON_PRIVATE_ADDRESS_BLOCKED',
+  ]);
+  const unreachableCodes = new Set([
+    'NOON_HOST_UNREACHABLE', 'NOON_FETCH_FAILED', 'NOON_REDIRECT_LOOP', 'NOON_REDIRECT_LIMIT',
+  ]);
+  let reason = 'unexpected';
+  if (invalidCodes.has(error?.code)) reason = 'invalid_url';
+  else if (error?.code === 'NOON_REQUEST_TIMEOUT') reason = 'timeout';
+  else if (unreachableCodes.has(error?.code)) reason = 'unreachable';
+  else if (error?.code === 'NOON_BLOCKED') reason = 'blocked';
+  else if (error?.code === 'NOON_HTTP_ERROR') {
+    if (error.details?.upstreamStatus === 404) reason = 'not_found';
+    else if (error.details?.upstreamStatus >= 500) reason = 'upstream_error';
+    else reason = 'upstream_error';
+  } else if (['NOON_EXTRACTION_FAILED', 'NOON_UNEXPECTED_CONTENT', 'NOON_RESPONSE_TOO_LARGE'].includes(error?.code)) {
+    reason = 'extraction';
+  }
+  const statusCode = error instanceof AppError ? error.statusCode : 500;
+  const details = { reason, causeCode: error?.code || 'UNEXPECTED_ERROR' };
+  if (Number.isInteger(error?.details?.upstreamStatus)) {
+    details.upstreamStatus = error.details.upstreamStatus;
+  }
+  return new AppError(statusCode, 'NOON_ANALYZE_FAILED', 'Could not analyze this Noon page.', details);
+}
+
+export async function analyzeNoon(url) {
+  try {
+    return await analyzeNoonUrl(url);
+  } catch (error) {
+    throw normalizeNoonAnalyzeError(error);
+  }
 }
 
 export async function listSupplierOptions(organizationId, candidateId) {

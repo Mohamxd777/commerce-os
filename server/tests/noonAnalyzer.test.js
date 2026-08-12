@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { analyzeNoonHtml, fetchPublicNoonResource, validateNoonUrl } from '../src/services/noonAnalyzerService.js';
+import { errorHandler } from '../src/middleware/errorHandler.js';
+import { analyzeNoonHtml, analyzeNoonUrl, fetchPublicNoonResource, validateNoonUrl } from '../src/services/noonAnalyzerService.js';
 import { inspectImageBuffer } from '../src/services/imageStorageService.js';
+import { normalizeNoonAnalyzeError } from '../src/services/researchService.js';
+import { AppError } from '../src/utils/AppError.js';
 
 test('Noon analyzer uses the documented fallback order and reports field provenance', () => {
   const html = `<!doctype html><html><head>
@@ -74,6 +77,115 @@ test('Noon fetch rejects redirects outside the allowlist', async () => {
   );
 });
 
+test('Noon fetch classifies an upstream 403 as a blocked analyzer request', async () => {
+  await assert.rejects(
+    fetchPublicNoonResource('https://www.noon.com/product', {
+      resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+      fetchImpl: async () => new Response('Forbidden', {
+        status: 403, headers: { 'content-type': 'text/html' },
+      }),
+    }),
+    (error) => error.code === 'NOON_BLOCKED' && error.details.upstreamStatus === 403,
+  );
+});
+
+test('Noon fetch preserves upstream 404 and 5xx status details', async () => {
+  for (const status of [404, 503]) {
+    await assert.rejects(
+      fetchPublicNoonResource('https://www.noon.com/product', {
+        resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+        fetchImpl: async () => new Response('Unavailable', {
+          status, headers: { 'content-type': 'text/html' },
+        }),
+      }),
+      (error) => error.code === 'NOON_HTTP_ERROR' && error.details.upstreamStatus === status,
+    );
+  }
+});
+
+test('Noon fetch classifies an aborted upstream request as a timeout', async () => {
+  await assert.rejects(
+    fetchPublicNoonResource('https://www.noon.com/product', {
+      timeoutMs: 5,
+      resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+      fetchImpl: async (_url, { signal }) => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      }),
+    }),
+    { code: 'NOON_REQUEST_TIMEOUT' },
+  );
+});
+
+test('Noon URL analysis succeeds with recognizable product evidence', async () => {
+  const result = await analyzeNoonUrl('https://www.noon.com/product', {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl: async () => new Response(`
+      <html><head><script type="application/ld+json">
+        {"@type":"Product","name":"Test hub","offers":{"price":250,"priceCurrency":"EGP"}}
+      </script></head><body></body></html>
+    `, { status: 200, headers: { 'content-type': 'text/html' } }),
+  });
+  assert.equal(result.values.title, 'Test hub');
+  assert.equal(result.values.currentPrice, 250);
+});
+
+test('Noon URL analysis reports an extraction failure for an empty product page', async () => {
+  await assert.rejects(
+    analyzeNoonUrl('https://www.noon.com/product', {
+      resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+      fetchImpl: async () => new Response('<html><head><title>Noon</title></head><body></body></html>', {
+        status: 200, headers: { 'content-type': 'text/html' },
+      }),
+    }),
+    { code: 'NOON_EXTRACTION_FAILED' },
+  );
+});
+
+test('Noon analyzer failures normalize to safe JSON with cause details', () => {
+  const causes = [
+    [new AppError(504, 'NOON_REQUEST_TIMEOUT', 'timeout'), 'timeout'],
+    [new AppError(422, 'NOON_BLOCKED', 'blocked', { upstreamStatus: 403 }), 'blocked'],
+    [new AppError(422, 'NOON_HTTP_ERROR', 'upstream', { upstreamStatus: 503 }), 'upstream_error'],
+    [new AppError(422, 'NOON_EXTRACTION_FAILED', 'failed'), 'extraction'],
+    [new Error('secret unexpected failure'), 'unexpected'],
+  ];
+  for (const [cause, reason] of causes) {
+    const normalized = normalizeNoonAnalyzeError(cause);
+    let body;
+    let status;
+    const response = {
+      status(value) { status = value; return this; },
+      json(value) { body = value; },
+    };
+    errorHandler(normalized, { id: 'test-request' }, response);
+    assert.equal(status, normalized.statusCode);
+    assert.equal(body.error.code, 'NOON_ANALYZE_FAILED');
+    assert.equal(body.error.message, 'Could not analyze this Noon page.');
+    assert.equal(body.error.details.reason, reason);
+    assert.equal(body.error.stack, undefined);
+    assert.doesNotMatch(JSON.stringify(body), /secret unexpected failure/);
+  }
+});
+
+test('unexpected server errors never expose stack traces in JSON', () => {
+  const previousConsoleError = console.error;
+  console.error = () => {};
+  try {
+    let body;
+    const response = { status() { return this; }, json(value) { body = value; } };
+    errorHandler(new Error('sensitive failure'), { id: 'test-request' }, response);
+    assert.equal(body.error.code, 'INTERNAL_SERVER_ERROR');
+    assert.equal(body.error.stack, undefined);
+    assert.doesNotMatch(JSON.stringify(body), /sensitive failure/);
+  } finally {
+    console.error = previousConsoleError;
+  }
+});
+
 test('managed image inspection rejects mismatches and truncated files', () => {
   const png = Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
@@ -87,4 +199,3 @@ test('managed image inspection rejects mismatches and truncated files', () => {
   assert.throws(() => inspectImageBuffer(png, 'image/gif'), { code: 'IMAGE_TYPE_UNSUPPORTED' });
   assert.throws(() => inspectImageBuffer(png, 'image/png', 10), { code: 'IMAGE_TOO_LARGE' });
 });
-

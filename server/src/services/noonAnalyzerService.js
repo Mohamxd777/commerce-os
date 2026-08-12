@@ -146,7 +146,14 @@ export async function fetchPublicNoonResource(value, options = {}) {
       continue;
     }
     if (!response.ok) {
-      throw new AppError(422, 'NOON_HTTP_ERROR', 'Noon returned HTTP ' + response.status + '.');
+      if ([403, 429].includes(response.status)) {
+        throw new AppError(422, 'NOON_BLOCKED', 'Noon blocked the analyzer request.', {
+          upstreamStatus: response.status,
+        });
+      }
+      throw new AppError(422, 'NOON_HTTP_ERROR', 'Noon returned HTTP ' + response.status + '.', {
+        upstreamStatus: response.status,
+      });
     }
     const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     if (image ? !['image/png', 'image/jpeg'].includes(contentType) : !['text/html', 'application/xhtml+xml'].includes(contentType)) {
@@ -406,8 +413,26 @@ export function analyzeNoonHtml(html, pageUrl, analyzedAt = new Date().toISOStri
   };
 }
 
-export async function analyzeNoonUrl(value) {
+export async function analyzeNoonUrl(value, options = {}) {
   const validated = validateNoonUrl(value).toString();
-  const resource = await fetchPublicNoonResource(validated);
-  return analyzeNoonHtml(resource.buffer.toString('utf8'), resource.finalUrl);
+  const resource = await fetchPublicNoonResource(validated, options);
+  const html = resource.buffer.toString('utf8');
+  if (!html.trim()) {
+    throw new AppError(422, 'NOON_EXTRACTION_FAILED', 'The Noon page did not contain analyzable content.');
+  }
+  const visibleStart = cleanText(html.slice(0, 200_000)
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')) || '';
+  if (/(?:access denied|verify you are human|captcha|request blocked|unusual traffic)/i.test(visibleStart)) {
+    throw new AppError(422, 'NOON_BLOCKED', 'Noon blocked the analyzer request.');
+  }
+  const result = analyzeNoonHtml(html, resource.finalUrl);
+  const values = result.values;
+  const hasProductEvidence = values.currentPrice !== null || values.model || values.brand
+    || values.seller || values.gtin || (Array.isArray(values.imageUrls) && values.imageUrls.length > 0)
+    || (values.specifications && Object.keys(values.specifications).length > 0);
+  if (!hasProductEvidence) {
+    throw new AppError(422, 'NOON_EXTRACTION_FAILED', 'The Noon page did not contain recognizable product data.');
+  }
+  return result;
 }
