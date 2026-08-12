@@ -18,6 +18,20 @@ describe('MarketplaceWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add observation' }));
     expect(onAddObservation).toHaveBeenCalledWith(expect.objectContaining({
       marketplace: 'Noon Egypt', sellingPrice: '279', listingUrl: 'https://www.noon.com/egypt-en/example',
-    }));
+    }), []);
+  });
+
+  it('keeps analyzed values in an editable preview and labels user changes', async () => {
+    const onAnalyze = vi.fn().mockResolvedValue({
+      analyzedAt: '2026-08-12T10:00:00.000Z', strategy: ['json_ld'], notFound: ['gtin'], warnings: [],
+      values: { canonicalUrl: 'https://www.noon.com/item/p/', title: 'Auto hub', currentPrice: 250, originalPrice: null, currency: 'EGP', rating: 4.5, reviewCount: 10, seller: 'Seller', brand: 'Brand', recentSales: null, bestsellerRank: null, noonExpress: true, availability: 'InStock', model: 'H5', gtin: null, specifications: {}, imageUrls: [], mainImageUrl: null },
+    });
+    render(<MarketplaceWorkspace candidate={{ snapshots: [], observation_count: 0 }} onAnalyze={onAnalyze} onAddObservation={vi.fn()} onSavePlannedPrice={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Noon product URL'), { target: { value: 'https://www.noon.com/item/p/' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze URL' }));
+    expect(await screen.findByDisplayValue('Auto hub')).toBeInTheDocument();
+    expect(screen.getAllByText('Auto').length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText(/Selling price/), { target: { value: '245' } });
+    expect(screen.getAllByText('User edited').length).toBeGreaterThan(0);
   });
 });

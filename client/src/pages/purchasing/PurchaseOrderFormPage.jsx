@@ -3,6 +3,7 @@ import { catalogApi } from '../../api/catalogApi.js';
 import { purchasingApi } from '../../api/purchasingApi.js';
 import { LoadingState, PageHeader } from '../../components/catalog/CatalogStates.jsx';
 import PurchaseOrderForm from '../../components/purchasing/PurchaseOrderForm.jsx';
+import ProductFirstPurchaseOrderForm from '../../components/purchasing/ProductFirstPurchaseOrderForm.jsx';
 
 export default function PurchaseOrderFormPage({ organizationId, purchaseOrderId }) {
   const [suppliers, setSuppliers] = useState([]);
@@ -12,6 +13,7 @@ export default function PurchaseOrderFormPage({ organizationId, purchaseOrderId 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [mode, setMode] = useState(purchaseOrderId ? 'supplier' : 'product');
 
   const loadSupplierProducts = useCallback((supplierId) => {
     if (!supplierId) {
@@ -66,7 +68,10 @@ export default function PurchaseOrderFormPage({ organizationId, purchaseOrderId 
   return (
     <>
       <PageHeader eyebrow="Purchasing" title={purchaseOrderId ? 'Edit draft purchase order' : 'Create purchase order'} description="Choose the supplier, review supplier-specific terms, and save server-calculated commercial totals." />
-      <PurchaseOrderForm key={purchaseOrder?.updated_at || 'new'} initial={purchaseOrder} suppliers={suppliers} skus={skus} supplierProducts={supplierProducts} onSupplierChange={loadSupplierProducts} onSubmit={submit} submitting={submitting} error={error} />
+      {!purchaseOrderId && <div className="workflow-mode-toggle" role="group" aria-label="Purchase order starting point"><button className={mode === 'product' ? 'active' : ''} onClick={() => setMode('product')}>Start with product</button><button className={mode === 'supplier' ? 'active' : ''} onClick={() => setMode('supplier')}>Start with supplier</button></div>}
+      {mode === 'product' && !purchaseOrderId
+        ? <ProductFirstPurchaseOrderForm skus={skus} suppliers={suppliers} onCompare={async (skuId) => (await purchasingApi.compareSkuSuppliers(organizationId, skuId, { isActive: true, limit: 100 })).data} onSubmit={submit} submitting={submitting} error={error} />
+        : <PurchaseOrderForm key={purchaseOrder?.updated_at || 'new'} initial={purchaseOrder} suppliers={suppliers} skus={skus} supplierProducts={supplierProducts} onSupplierChange={loadSupplierProducts} onSubmit={submit} submitting={submitting} error={error} />}
     </>
   );
 }

@@ -54,6 +54,11 @@ export async function listSupplierProducts(
             supplier_product.preferred, supplier_product.is_active,
             supplier_product.notes, supplier_product.created_at,
             supplier_product.updated_at, supplier.name AS supplier_name,
+            supplier_product.warranty_text,
+            supplier_product.defective_unit_replacement,
+            supplier_product.last_quote_date,
+            supplier_product.research_supplier_option_id,
+            supplier_product.sample_id,
             sku.sku_code, product.id AS product_id,
             product.name AS product_name, variant.name AS variant_name,
             (
@@ -62,7 +67,10 @@ export async function listSupplierProducts(
               WHERE history.supplier_product_id = supplier_product.id
                 AND history.organization_id = supplier_product.organization_id
                 AND history.effective_to IS NULL
-            ) AS last_price_update
+            ) AS last_price_update,
+            (SELECT sample.workflow_state FROM product_samples AS sample
+             WHERE sample.id = supplier_product.sample_id
+               AND sample.organization_id = supplier_product.organization_id) AS sample_state
      ${filters}
      ORDER BY supplier_product.preferred DESC, supplier.name, sku.sku_code
      LIMIT $7 OFFSET $8`,

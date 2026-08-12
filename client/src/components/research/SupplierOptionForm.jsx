@@ -11,6 +11,7 @@ export default function SupplierOptionForm({ suppliers = [], onSubmit, submittin
     priceQty20: '', priceQty50: '', priceQty100: '', moq: '1', leadTimeDays: '0',
     warrantyText: '', defectiveUnitReplacement: '', invoiceAvailable: '',
     sampleAvailable: '', preferred: false, notes: '',
+    contactPerson: '', phone: '', contactUrl: '', quoteDate: new Date().toISOString().slice(0, 10),
   });
 
   function update(field, value) { setForm((current) => ({ ...current, [field]: value })); }
@@ -33,6 +34,10 @@ export default function SupplierOptionForm({ suppliers = [], onSubmit, submittin
       sampleAvailable: availability(form.sampleAvailable),
       preferred: form.preferred,
       notes: form.notes || null,
+      contactPerson: form.contactPerson || null,
+      phone: form.phone || null,
+      contactUrl: form.contactUrl || null,
+      quoteDate: form.quoteDate || null,
     };
     for (const quantity of quantities) {
       body['priceQty' + quantity] = form.samePriceAllQuantities ? null : form['priceQty' + quantity] || null;
@@ -58,6 +63,10 @@ export default function SupplierOptionForm({ suppliers = [], onSubmit, submittin
         <summary>More supplier details <span>Useful when choosing the best option</span></summary>
         <div className="form-grid two-columns">
           <label className="span-two">Warranty<input maxLength="500" value={form.warrantyText} onChange={(event) => update('warrantyText', event.target.value)} /></label>
+          <label>Contact person<input maxLength="200" value={form.contactPerson} onChange={(event) => update('contactPerson', event.target.value)} /></label>
+          <label>Phone<input maxLength="80" value={form.phone} onChange={(event) => update('phone', event.target.value)} /></label>
+          <label>Contact / listing URL<input type="url" value={form.contactUrl} onChange={(event) => update('contactUrl', event.target.value)} /></label>
+          <label>Quote date<input type="date" value={form.quoteDate} onChange={(event) => update('quoteDate', event.target.value)} /></label>
           {[['defectiveUnitReplacement', 'Defective-unit replacement'], ['invoiceAvailable', 'Invoice availability'], ['sampleAvailable', 'Sample availability']].map(([field, label]) => <label key={field}>{label}<select value={form[field]} onChange={(event) => update(field, event.target.value)}><option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option></select></label>)}
           <label className="checkbox-field"><input type="checkbox" checked={form.preferred} onChange={(event) => update('preferred', event.target.checked)} />Mark as best option</label>
           <label className="span-two">Notes<textarea rows="3" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>

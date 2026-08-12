@@ -6,6 +6,7 @@ import { brandRouter, categoryRouter, productRouter, skuRouter } from './catalog
 import { purchasingRouter } from './purchasingRoutes.js';
 import { inventoryRouter } from './inventoryRoutes.js';
 import { researchRouter } from './researchRoutes.js';
+import { imageRouter } from './imageRoutes.js';
 
 export const apiRouter = Router();
 
@@ -41,3 +42,4 @@ apiRouter.use('/skus', skuRouter);
 apiRouter.use(purchasingRouter);
 apiRouter.use(inventoryRouter);
 apiRouter.use(researchRouter);
+apiRouter.use(imageRouter);

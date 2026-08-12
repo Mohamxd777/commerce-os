@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
+import { rm } from 'node:fs/promises';
 import { after, before, describe, it } from 'node:test';
 import request from 'supertest';
-import { app } from '../src/app.js';
-import { closeDatabase, pool } from '../src/config/database.js';
-import { hashPassword } from '../src/utils/password.js';
 
 const suffix = randomUUID().slice(0, 8);
 const ownerEmails = [
@@ -12,6 +12,13 @@ const ownerEmails = [
   'research-owner-b-' + suffix + '@example.com',
 ];
 const memberEmail = 'research-member-' + suffix + '@example.com';
+const localDataDirectory = path.join(os.tmpdir(), 'commerce-os-research-test-' + suffix);
+process.env.LOCAL_DATA_DIR = localDataDirectory;
+
+let app;
+let pool;
+let closeDatabase;
+let hashPassword;
 
 let organizationA;
 let organizationB;
@@ -43,6 +50,10 @@ async function cleanup() {
   if (organizationIds.length === 0) return;
 
   for (const table of [
+    'local_image_links',
+    'local_images',
+    'supplier_price_history',
+    'supplier_products',
     'product_candidate_evidence',
     'candidate_launch_evaluations',
     'candidate_unit_economics',
@@ -119,6 +130,9 @@ async function createMember() {
 }
 
 before(async () => {
+  ({ app } = await import('../src/app.js'));
+  ({ pool, closeDatabase } = await import('../src/config/database.js'));
+  ({ hashPassword } = await import('../src/utils/password.js'));
   await cleanup();
   const first = await registerOwner(ownerEmails[0], 'Research A ' + suffix);
   const second = await registerOwner(ownerEmails[1], 'Research B ' + suffix);
@@ -130,8 +144,10 @@ before(async () => {
 });
 
 after(async () => {
+  if (!pool) return;
   await cleanup();
   await closeDatabase();
+  await rm(localDataDirectory, { recursive: true, force: true });
 });
 
 describe('Product research API', { concurrency: false }, () => {
@@ -547,5 +563,88 @@ describe('Product research API', { concurrency: false }, () => {
     });
     assert.equal(duplicate.status, 409);
     assert.equal(duplicate.body.error.code, 'RESEARCH_PRODUCT_ALREADY_CREATED');
+  });
+
+  it('explicitly links a research supplier to the converted SKU without creating a PO or inventory', async () => {
+    const promoted = await headers(
+      request(app).post('/api/research/supplier-options/' + supplierOptionId + '/promote'),
+      organizationA, ownerCookieA,
+    ).send({ action: 'use_existing', supplierId, linkToConvertedSku: true, preferred: true });
+    assert.equal(promoted.status, 200, JSON.stringify(promoted.body));
+    assert.equal(promoted.body.data.relationshipCreated, true);
+    assert.equal(promoted.body.data.purchaseOrderCreated, false);
+    assert.equal(promoted.body.data.inventoryChanged, false);
+    assert.equal(promoted.body.data.relationship.research_supplier_option_id, supplierOptionId);
+
+    const comparison = await headers(
+      request(app).get('/api/skus/' + promoted.body.data.relationship.sku_id + '/suppliers?isActive=true'),
+      organizationA, ownerCookieA,
+    );
+    assert.equal(comparison.status, 200, JSON.stringify(comparison.body));
+    assert.equal(comparison.body.data.length, 1);
+    assert.equal(comparison.body.data[0].is_recommended, true);
+    assert.ok(comparison.body.data[0].recommendation_reasons.includes('Marked preferred for this SKU'));
+
+    const sideEffects = await pool.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM inventory_movements WHERE organization_id = $1) AS movements,
+         (SELECT COUNT(*)::int FROM purchase_orders WHERE organization_id = $1) AS purchase_orders`,
+      [organizationA],
+    );
+    assert.deepEqual(sideEffects.rows[0], { movements: 0, purchase_orders: 0 });
+
+    const duplicate = await headers(
+      request(app).post('/api/research/supplier-options/' + supplierOptionId + '/promote'),
+      organizationA, ownerCookieA,
+    ).send({ action: 'use_existing', supplierId, linkToConvertedSku: true, preferred: true });
+    assert.equal(duplicate.status, 200, JSON.stringify(duplicate.body));
+    assert.equal(duplicate.body.data.relationshipCreated, false);
+  });
+
+  it('stores, reads, marks and deletes organization-scoped local image associations', async () => {
+    const png = Buffer.concat([
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      Buffer.from([0, 0, 0, 13]), Buffer.from('IHDR'),
+      Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]), Buffer.alloc(4),
+      Buffer.from([0, 0, 0, 0]), Buffer.from('IEND'), Buffer.alloc(4),
+    ]);
+    const uploaded = await headers(
+      request(app).post('/api/images/upload'), organizationA, ownerCookieA,
+    ).set('Content-Type', 'image/png')
+      .set('x-file-name', 'hub.png')
+      .set('x-image-entity-type', 'candidate')
+      .set('x-image-entity-id', candidateId)
+      .set('x-image-primary', 'true')
+      .send(png);
+    assert.equal(uploaded.status, 201, JSON.stringify(uploaded.body));
+    assert.equal(uploaded.body.data.is_primary, true);
+
+    const listed = await headers(
+      request(app).get('/api/images?entityType=candidate&entityId=' + candidateId),
+      organizationA, ownerCookieA,
+    );
+    assert.equal(listed.status, 200, JSON.stringify(listed.body));
+    assert.equal(listed.body.data.length, 1);
+    assert.equal(listed.body.data[0].source, 'upload');
+
+    const content = await headers(
+      request(app).get('/api/images/' + uploaded.body.data.id + '/content'),
+      organizationA, ownerCookieA,
+    );
+    assert.equal(content.status, 200);
+    assert.equal(content.headers['content-type'], 'image/png');
+
+    const hidden = await headers(
+      request(app).get('/api/images?entityType=candidate&entityId=' + candidateId),
+      organizationB, ownerCookieB,
+    );
+    assert.equal(hidden.status, 404);
+
+    const removed = await headers(
+      request(app).delete('/api/images/' + uploaded.body.data.id + '?entityType=candidate&entityId=' + candidateId),
+      organizationA, ownerCookieA,
+    );
+    assert.equal(removed.status, 200, JSON.stringify(removed.body));
+    assert.equal(removed.body.data.physicalFileDeleted, true);
   });
 });

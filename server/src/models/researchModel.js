@@ -7,13 +7,20 @@ const candidateSelect = `
          candidate.planned_selling_price, candidate.planned_price_currency,
          candidate.status, candidate.notes, candidate.catalog_product_id,
          candidate.converted_at, candidate.created_at, candidate.updated_at,
+         (SELECT sku.id FROM product_variants AS converted_variant
+          JOIN skus AS sku ON sku.product_variant_id = converted_variant.id
+            AND sku.organization_id = converted_variant.organization_id
+          WHERE converted_variant.product_id = candidate.catalog_product_id
+            AND converted_variant.organization_id = candidate.organization_id
+          ORDER BY sku.created_at, sku.id LIMIT 1) AS converted_sku_id,
          category.name AS category_name,
          latest_snapshot.selling_price AS market_price,
          latest_snapshot.currency AS market_currency,
          latest_snapshot.rating, latest_snapshot.review_count,
          latest_snapshot.demand_score, latest_snapshot.competition_score,
          market_summary.minimum_observed_price, market_summary.median_observed_price,
-         market_summary.observation_count,
+         market_summary.maximum_observed_price, market_summary.average_rating,
+         market_summary.total_review_evidence, market_summary.observation_count,
          preferred_supplier.id AS preferred_supplier_option_id,
          COALESCE(preferred_supplier.supplier_name, preferred_supplier.lead_name) AS preferred_supplier_name,
          preferred_supplier.quoted_unit_cost, preferred_supplier.currency AS supplier_currency,
@@ -53,8 +60,11 @@ const candidateSelect = `
   ) AS latest_snapshot ON TRUE
   LEFT JOIN LATERAL (
     SELECT MIN(snapshot.selling_price) AS minimum_observed_price,
+           MAX(snapshot.selling_price) AS maximum_observed_price,
            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY snapshot.selling_price)::numeric(19, 4)
              AS median_observed_price,
+           AVG(snapshot.rating)::numeric(5, 2) AS average_rating,
+           COALESCE(SUM(snapshot.review_count), 0)::int AS total_review_evidence,
            COUNT(*)::int AS observation_count
     FROM product_candidate_market_snapshots AS snapshot
     WHERE snapshot.candidate_id = candidate.id
@@ -200,9 +210,11 @@ export async function createSnapshot(database, input) {
        selling_price, currency, rating, review_count, demand_score,
        competition_score, evidence_notes, listing_title, seller_brand,
        original_price, recent_sales_signal, bestseller_rank_text,
-       fulfillment_badge, created_by
+       fulfillment_badge, canonical_url, availability, key_specifications,
+       model_number, gtin, main_image_url, analyzed_at, extraction_metadata, created_by
      ) VALUES ($1, $2, $3, $4, COALESCE($5, NOW()), $6, $7, $8, $9, $10,
-       $11, $12, $13, $14, $15, $16, $17, $18, $19)
+       $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+       $23, $24, $25, $26, $27)
      RETURNING *`,
     [input.organizationId, input.candidateId, input.marketplace, input.listingUrl,
       input.observedAt ?? null, input.sellingPrice ?? null, input.currency ?? null,
@@ -210,7 +222,11 @@ export async function createSnapshot(database, input) {
       input.competitionScore ?? null, input.evidenceNotes ?? null,
       input.listingTitle ?? null, input.sellerBrand ?? null,
       input.originalPrice ?? null, input.recentSalesSignal ?? null,
-      input.bestsellerRankText ?? null, input.fulfillmentBadge ?? null, input.userId],
+      input.bestsellerRankText ?? null, input.fulfillmentBadge ?? null,
+      input.canonicalUrl ?? null, input.availability ?? null,
+      input.keySpecifications ?? {}, input.modelNumber ?? null, input.gtin ?? null,
+      input.mainImageUrl ?? null, input.analyzedAt ?? null,
+      input.extractionMetadata ?? {}, input.userId],
   );
   return result.rows[0];
 }
@@ -255,9 +271,11 @@ export async function createSupplierOption(database, input) {
        quote_valid_until, preferred, notes, model_variant,
        same_price_all_quantities, price_qty_1, price_qty_5, price_qty_10,
        price_qty_20, price_qty_50, price_qty_100, warranty_text,
-       defective_unit_replacement, invoice_available, sample_available
+       defective_unit_replacement, invoice_available, sample_available,
+       contact_person, phone
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-       $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+       $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25,
+       $26, $27)
      RETURNING *`,
     [input.organizationId, input.candidateId, input.supplierId ?? null,
       input.leadName ?? null, input.contactUrl ?? null, input.quotedUnitCost,
@@ -267,7 +285,8 @@ export async function createSupplierOption(database, input) {
       input.priceQty1 ?? null, input.priceQty5 ?? null, input.priceQty10 ?? null,
       input.priceQty20 ?? null, input.priceQty50 ?? null, input.priceQty100 ?? null,
       input.warrantyText ?? null, input.defectiveUnitReplacement ?? null,
-      input.invoiceAvailable ?? null, input.sampleAvailable ?? null],
+      input.invoiceAvailable ?? null, input.sampleAvailable ?? null,
+      input.contactPerson ?? null, input.phone ?? null],
   );
   return result.rows[0];
 }

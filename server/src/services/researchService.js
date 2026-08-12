@@ -1,6 +1,7 @@
 import { pool } from '../config/database.js';
 import { paginationMetadata } from '../models/catalogModelHelpers.js';
 import * as researchModel from '../models/researchModel.js';
+import { analyzeNoonUrl } from './noonAnalyzerService.js';
 import { AppError } from '../utils/AppError.js';
 
 const transitions = {
@@ -21,6 +22,24 @@ const sampleTransitions = {
   passed: new Set(['testing']),
   failed: new Set(['testing', 'requested']),
 };
+
+export function normalizeSupplierIdentity(value) {
+  return String(value || '').normalize('NFKC').toLocaleLowerCase('en-US')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
+}
+
+async function addSupplierMatches(database, organizationId, options) {
+  const suppliers = await database.query(
+    `SELECT id, name, contact_person, phone, email, website_url
+     FROM suppliers WHERE organization_id = $1 AND is_active = TRUE ORDER BY name`,
+    [organizationId],
+  );
+  return options.map((option) => {
+    if (option.supplier_id || !option.lead_name) return { ...option, identity_matches: [] };
+    const key = normalizeSupplierIdentity(option.lead_name);
+    return { ...option, identity_matches: suppliers.rows.filter((supplier) => normalizeSupplierIdentity(supplier.name) === key) };
+  });
+}
 
 async function requireCandidate(database, organizationId, candidateId, forUpdate = false) {
   const candidate = await researchModel.findCandidate(database, {
@@ -102,7 +121,7 @@ export async function getCandidate(organizationId, id) {
       orderBy: 'created_at DESC',
     }),
   ]);
-  return { ...candidate, snapshots, suppliers, samples, feeAssumptions: fees, economics, evaluations, evidence };
+  return { ...candidate, snapshots, suppliers: await addSupplierMatches(pool, organizationId, suppliers), samples, feeAssumptions: fees, economics, evaluations, evidence };
 }
 
 export async function createCandidate(organizationId, userId, input) {
@@ -214,9 +233,14 @@ export async function createSnapshot(organizationId, candidateId, userId, input)
   return researchModel.createSnapshot(pool, { organizationId, candidateId, userId, ...input });
 }
 
+export function analyzeNoon(url) {
+  return analyzeNoonUrl(url);
+}
+
 export async function listSupplierOptions(organizationId, candidateId) {
   await requireCandidate(pool, organizationId, candidateId);
-  return researchModel.listSupplierOptions(pool, { organizationId, candidateId });
+  const options = await researchModel.listSupplierOptions(pool, { organizationId, candidateId });
+  return addSupplierMatches(pool, organizationId, options);
 }
 
 export async function createSupplierOption(organizationId, candidateId, input) {
@@ -249,6 +273,7 @@ export async function patchSupplierOption(organizationId, id, input) {
     priceQty50: 'price_qty_50', priceQty100: 'price_qty_100',
     warrantyText: 'warranty_text', defectiveUnitReplacement: 'defective_unit_replacement',
     invoiceAvailable: 'invoice_available', sampleAvailable: 'sample_available',
+    contactPerson: 'contact_person', phone: 'phone',
   };
   const changes = {};
   for (const [field, column] of Object.entries(fieldMap)) {
@@ -431,6 +456,157 @@ export async function createProductFromCandidate(organizationId, candidateId, us
     if (error.code === '23505') {
       throw new AppError(409, 'RESEARCH_PRODUCT_CONFLICT', 'The SKU or product conversion already exists.');
     }
+    throw databaseError(error);
+  } finally {
+    database.release();
+  }
+}
+
+export async function promoteSupplierOption(organizationId, optionId, userId, input) {
+  const database = await pool.connect();
+  try {
+    await database.query('BEGIN');
+    const optionResult = await database.query(
+      `SELECT option.*, candidate.status AS candidate_status,
+              (SELECT sku.id FROM product_variants AS variant
+               JOIN skus AS sku ON sku.product_variant_id = variant.id
+                 AND sku.organization_id = variant.organization_id
+               WHERE variant.product_id = candidate.catalog_product_id
+                 AND variant.organization_id = candidate.organization_id
+               ORDER BY sku.created_at, sku.id LIMIT 1) AS converted_sku_id
+       FROM candidate_supplier_options AS option
+       JOIN product_candidates AS candidate
+         ON candidate.id = option.candidate_id AND candidate.organization_id = option.organization_id
+       WHERE option.organization_id = $1 AND option.id = $2
+       FOR UPDATE OF option`,
+      [organizationId, optionId],
+    );
+    const option = optionResult.rows[0];
+    if (!option) throw new AppError(404, 'RESEARCH_SUPPLIER_OPTION_NOT_FOUND', 'Supplier option not found.');
+    if (input.action === 'keep_lead') {
+      await database.query('COMMIT');
+      return { action: 'keep_lead', supplierOptionId: option.id, linked: false, purchaseOrderCreated: false, inventoryChanged: false };
+    }
+
+    let supplier;
+    if (input.action === 'use_existing') {
+      const supplierResult = await database.query(
+        `SELECT * FROM suppliers WHERE organization_id = $1 AND id = $2 AND is_active = TRUE`,
+        [organizationId, input.supplierId],
+      );
+      supplier = supplierResult.rows[0];
+      if (!supplier) throw new AppError(400, 'RESEARCH_SUPPLIER_INVALID', 'Supplier does not belong to this organization.');
+    } else {
+      if (!option.lead_name) throw new AppError(409, 'RESEARCH_LEAD_NAME_REQUIRED', 'This option does not contain a supplier lead to create.');
+      const activeSuppliers = await database.query(
+        `SELECT id, name FROM suppliers WHERE organization_id = $1 AND is_active = TRUE ORDER BY name`,
+        [organizationId],
+      );
+      const key = normalizeSupplierIdentity(option.lead_name);
+      const matches = activeSuppliers.rows.filter((item) => normalizeSupplierIdentity(item.name) === key);
+      if (matches.length) {
+        throw new AppError(409, 'RESEARCH_SUPPLIER_MATCH_EXISTS', 'A matching supplier already exists. Explicitly choose that supplier or keep this as a research lead.', { matches });
+      }
+      const created = await database.query(
+        `INSERT INTO suppliers (
+           organization_id, name, contact_person, phone, website_url,
+           notes, preferred_currency, is_active
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE) RETURNING *`,
+        [organizationId, option.lead_name, option.contact_person, option.phone,
+          option.contact_url, 'Created explicitly from research supplier option ' + option.id,
+          option.currency],
+      );
+      supplier = created.rows[0];
+    }
+
+    await database.query(
+      `UPDATE candidate_supplier_options
+       SET supplier_id = $1, supplier_linked_at = NOW(), updated_at = NOW()
+       WHERE organization_id = $2 AND id = $3`,
+      [supplier.id, organizationId, option.id],
+    );
+
+    let relationship = null;
+    let relationshipCreated = false;
+    if (input.linkToConvertedSku) {
+      if (option.candidate_status !== 'launched' || !option.converted_sku_id) {
+        throw new AppError(409, 'RESEARCH_SKU_NOT_CONVERTED', 'Create the draft SKU before linking its supplier.');
+      }
+      const existing = await database.query(
+        `SELECT * FROM supplier_products
+         WHERE organization_id = $1 AND supplier_id = $2 AND sku_id = $3 AND is_active = TRUE`,
+        [organizationId, supplier.id, option.converted_sku_id],
+      );
+      if (existing.rowCount > 0) {
+        relationship = existing.rows[0];
+        if (input.preferred) {
+          await database.query(
+            `UPDATE supplier_products SET preferred = FALSE, updated_at = NOW()
+             WHERE organization_id = $1 AND sku_id = $2 AND id <> $3
+               AND preferred = TRUE AND is_active = TRUE`,
+            [organizationId, option.converted_sku_id, relationship.id],
+          );
+        }
+        await database.query(
+          `UPDATE supplier_products SET
+             research_supplier_option_id = COALESCE(research_supplier_option_id, $1),
+             warranty_text = COALESCE(warranty_text, $2),
+             defective_unit_replacement = COALESCE(defective_unit_replacement, $3),
+             last_quote_date = GREATEST(last_quote_date, $4::date),
+             preferred = CASE WHEN $5 THEN TRUE ELSE preferred END,
+             updated_at = NOW()
+           WHERE id = $6`,
+          [option.id, option.warranty_text, option.defective_unit_replacement,
+            option.quote_date, input.preferred, relationship.id],
+        );
+        relationship = (await database.query('SELECT * FROM supplier_products WHERE id = $1', [relationship.id])).rows[0];
+      } else {
+        if (input.preferred) {
+          await database.query(
+            `UPDATE supplier_products SET preferred = FALSE, updated_at = NOW()
+             WHERE organization_id = $1 AND sku_id = $2 AND preferred = TRUE AND is_active = TRUE`,
+            [organizationId, option.converted_sku_id],
+          );
+        }
+        const sample = await database.query(
+          `SELECT id FROM product_samples
+           WHERE organization_id = $1 AND supplier_option_id = $2
+           ORDER BY CASE workflow_state WHEN 'passed' THEN 0 ELSE 1 END, created_at DESC LIMIT 1`,
+          [organizationId, option.id],
+        );
+        const inserted = await database.query(
+          `INSERT INTO supplier_products (
+             organization_id, supplier_id, sku_id, supplier_sku_code,
+             current_unit_cost, currency, moq, lead_time_days, preferred,
+             is_active, notes, warranty_text, defective_unit_replacement,
+             last_quote_date, research_supplier_option_id, sample_id
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, $13, $14, $15)
+           RETURNING *`,
+          [organizationId, supplier.id, option.converted_sku_id,
+            option.model_variant?.slice(0, 120) || null, option.quoted_unit_cost,
+            option.currency, option.moq, option.lead_time_days, input.preferred,
+            option.notes, option.warranty_text, option.defective_unit_replacement,
+            option.quote_date, option.id, sample.rows[0]?.id ?? null],
+        );
+        relationship = inserted.rows[0];
+        relationshipCreated = true;
+        await database.query(
+          `INSERT INTO supplier_price_history (
+             organization_id, supplier_product_id, unit_cost, currency,
+             effective_from, source, notes
+           ) VALUES ($1, $2, $3, $4, COALESCE($5::date, CURRENT_DATE), $6, $7)`,
+          [organizationId, relationship.id, option.quoted_unit_cost, option.currency,
+            option.quote_date, 'Research supplier option', 'Linked explicitly by user ' + userId],
+        );
+      }
+    }
+    await database.query('COMMIT');
+    return {
+      action: input.action, supplier, supplierOptionId: option.id,
+      relationship, relationshipCreated, purchaseOrderCreated: false, inventoryChanged: false,
+    };
+  } catch (error) {
+    await database.query('ROLLBACK');
     throw databaseError(error);
   } finally {
     database.release();

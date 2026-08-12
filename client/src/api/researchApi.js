@@ -11,12 +11,16 @@ export const researchApi = {
     apiRequest('/research/candidates/' + id, { organizationId }),
   patchCandidate: (organizationId, id, body) =>
     apiRequest('/research/candidates/' + id, { organizationId, method: 'PATCH', body }),
+  analyzeNoon: (organizationId, url) =>
+    apiRequest('/research/noon/analyze', { organizationId, method: 'POST', body: { url } }),
   createSnapshot: (organizationId, id, body) =>
     apiRequest('/research/candidates/' + id + '/snapshots', { organizationId, method: 'POST', body }),
   createSupplierOption: (organizationId, id, body) =>
     apiRequest('/research/candidates/' + id + '/suppliers', { organizationId, method: 'POST', body }),
   patchSupplierOption: (organizationId, id, body) =>
     apiRequest('/research/supplier-options/' + id, { organizationId, method: 'PATCH', body }),
+  promoteSupplierOption: (organizationId, id, body) =>
+    apiRequest('/research/supplier-options/' + id + '/promote', { organizationId, method: 'POST', body }),
   createSample: (organizationId, id, body) =>
     apiRequest('/research/candidates/' + id + '/samples', { organizationId, method: 'POST', body }),
   patchSample: (organizationId, id, body) =>

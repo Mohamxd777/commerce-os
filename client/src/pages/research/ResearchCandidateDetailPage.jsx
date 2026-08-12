@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { catalogApi } from '../../api/catalogApi.js';
 import { purchasingApi } from '../../api/purchasingApi.js';
 import { researchApi } from '../../api/researchApi.js';
+import { imageApi } from '../../api/imageApi.js';
 import BusinessTerm from '../../components/BusinessTerm.jsx';
 import { ErrorState, LoadingState, PageHeader } from '../../components/catalog/CatalogStates.jsx';
 import MarketplaceWorkspace from '../../components/research/MarketplaceWorkspace.jsx';
@@ -9,6 +10,7 @@ import ResearchWorkflow from '../../components/research/ResearchWorkflow.jsx';
 import SampleEvaluationForm from '../../components/research/SampleEvaluationForm.jsx';
 import SupplierOptionForm from '../../components/research/SupplierOptionForm.jsx';
 import UnitEconomicsCalculator from '../../components/research/UnitEconomicsCalculator.jsx';
+import ImageGallery from '../../components/research/ImageGallery.jsx';
 import { money, percent, researchTerms } from '../../components/research/ResearchTerms.js';
 
 const tabs = ['Overview', 'Suppliers', 'Marketplace', 'Economics', 'Samples', 'Decision'];
@@ -30,7 +32,7 @@ const quantities = [1, 5, 10, 20, 50, 100];
 function optional(value) { return value === '' ? null : value; }
 function yesNo(value) { return value === null || value === undefined ? 'Unknown' : value ? 'Yes' : 'No'; }
 
-function OverviewTab({ candidate, categories, onSave }) {
+function OverviewTab({ organizationId, candidate, categories, onSave }) {
   const [form, setForm] = useState({
     name: candidate.name, categoryId: candidate.category_id || '', brandName: candidate.brand_name || '',
     modelNumber: candidate.model_number || '', gtin: candidate.gtin || '',
@@ -54,11 +56,12 @@ function OverviewTab({ candidate, categories, onSave }) {
       </form>
       <dl className="metadata-grid"><div><dt>Created</dt><dd>{new Date(candidate.created_at).toLocaleString()}</dd></div><div><dt>Last updated</dt><dd>{new Date(candidate.updated_at).toLocaleString()}</dd></div></dl>
     </section>
-    <section className="workspace-card"><div className="detail-card-heading"><div><p className="eyebrow">References</p><h2>Photos and evidence</h2></div><span>{candidate.evidence.length}</span></div>{candidate.evidence.length === 0 ? <div className="empty-state compact"><h3>No photo references yet</h3><p>Quick Capture can save an external photo URL without storing binary data in PostgreSQL.</p></div> : <div className="evidence-grid">{candidate.evidence.map((item) => <a key={item.id} href={item.source_url || '#'} target="_blank" rel="noreferrer"><strong>{item.title}</strong><small>{item.evidence_type}</small></a>)}</div>}</section>
+    <ImageGallery organizationId={organizationId} entityType="candidate" entityId={candidate.id} title="Candidate photos" />
+    <section className="workspace-card"><div className="detail-card-heading"><div><p className="eyebrow">References</p><h2>External evidence</h2></div><span>{candidate.evidence.length}</span></div>{candidate.evidence.length === 0 ? <div className="empty-state compact"><h3>No external references yet</h3><p>Links remain separate from locally managed photos.</p></div> : <div className="evidence-grid">{candidate.evidence.map((item) => <a key={item.id} href={item.source_url || '#'} target="_blank" rel="noreferrer"><strong>{item.title}</strong><small>{item.evidence_type}</small></a>)}</div>}</section>
   </div>;
 }
 
-function SuppliersTab({ candidate, suppliers, onAdd, onChoose }) {
+function SuppliersTab({ organizationId, candidate, suppliers, onAdd, onChoose }) {
   const selected = candidate.suppliers.find((option) => option.preferred);
   const cheapest = [...candidate.suppliers].sort((a, b) => Number(a.quoted_unit_cost) - Number(b.quoted_unit_cost))[0];
   const effectivePrice = (option, quantity) => option.same_price_all_quantities ? option.quoted_unit_cost : option['price_qty_' + quantity] ?? option.quoted_unit_cost;
@@ -75,6 +78,7 @@ function SuppliersTab({ candidate, suppliers, onAdd, onChoose }) {
       <dl className="supplier-terms"><div><dt><BusinessTerm term="MOQ" explanation={researchTerms.MOQ} /></dt><dd>{Number(option.moq)}</dd></div><div><dt>Lead time</dt><dd>{option.lead_time_days} days</dd></div><div><dt>Warranty</dt><dd>{option.warranty_text || 'Not recorded'}</dd></div><div><dt>Defect replacement</dt><dd>{yesNo(option.defective_unit_replacement)}</dd></div><div><dt>Invoice</dt><dd>{yesNo(option.invoice_available)}</dd></div><div><dt>Sample</dt><dd>{yesNo(option.sample_available)}</dd></div></dl>
       {option.notes && <p>{option.notes}</p>}
       {!option.preferred && <button className="secondary-button" onClick={() => onChoose(option.id)}>Choose as best</button>}
+      <ImageGallery organizationId={organizationId} entityType="supplier_option" entityId={option.id} title="Supplier-option images" />
     </article>)}</section>
     <section className="workspace-card"><div className="detail-card-heading"><div><p className="eyebrow">Supplier quote</p><h2>Add another option</h2></div></div><SupplierOptionForm suppliers={suppliers} onSubmit={onAdd} /></section>
   </div>;
@@ -89,10 +93,10 @@ function EconomicsTab({ candidate, onCalculate }) {
   </div>;
 }
 
-function SamplesTab({ candidate, onAdd, onMove }) {
+function SamplesTab({ organizationId, candidate, onAdd, onMove }) {
   return <div className="workspace-stack">
     <section className="workspace-card"><div className="detail-card-heading"><div><p className="eyebrow">Flexible for any product</p><h2>Start a sample</h2></div><span>{candidate.samples.length} records</span></div><p className="form-note">Checklist items are optional. Add only what is relevant for this product.</p><SampleEvaluationForm supplierOptions={candidate.suppliers} onSubmit={onAdd} /></section>
-    <section className="sample-timeline">{candidate.samples.length === 0 ? <div className="empty-state compact"><h3>Sample not requested</h3><p>Use “Buy/Test Sample” in Decision, or start a sample above.</p></div> : candidate.samples.map((sample) => <article key={sample.id}><div><span className={'status-pill ' + sample.workflow_state}>{sampleLabels[sample.workflow_state]}</span><div><strong>{sample.reference_code || 'Sample'}</strong><small>{sample.sample_cost ? money(sample.sample_cost, sample.currency || 'EGP') : 'Cost not recorded'} · {sample.checklist.length} checks</small></div></div>{sample.notes && <p>{sample.notes}</p>}<div className="sample-actions">{sampleNext[sample.workflow_state].map((state) => <button className={state === 'failed' ? 'danger-button' : 'secondary-button'} key={state} onClick={() => onMove(sample.id, state)}>Mark {sampleLabels[state]}</button>)}</div></article>)}</section>
+    <section className="sample-timeline">{candidate.samples.length === 0 ? <div className="empty-state compact"><h3>Sample not requested</h3><p>Use “Buy/Test Sample” in Decision, or start a sample above.</p></div> : candidate.samples.map((sample) => <article key={sample.id}><div><span className={'status-pill ' + sample.workflow_state}>{sampleLabels[sample.workflow_state]}</span><div><strong>{sample.reference_code || 'Sample'}</strong><small>{sample.sample_cost ? money(sample.sample_cost, sample.currency || 'EGP') : 'Cost not recorded'} · {sample.checklist.length} checks</small></div></div>{sample.notes && <p>{sample.notes}</p>}<div className="sample-actions">{sampleNext[sample.workflow_state].map((state) => <button className={state === 'failed' ? 'danger-button' : 'secondary-button'} key={state} onClick={() => onMove(sample.id, state)}>Mark {sampleLabels[state]}</button>)}</div><ImageGallery organizationId={organizationId} entityType="sample" entityId={sample.id} title="Sample photos" /></article>)}</section>
   </div>;
 }
 
@@ -107,7 +111,24 @@ function ConversionForm({ candidate, categories, onConvert }) {
   return <section className="conversion-panel"><div><p className="eyebrow">Explicit conversion</p><h2>Create Draft Product / Variant / SKU</h2><p>This creates no inventory, purchase order, inventory movement, or supplier link.</p></div><form onSubmit={(event) => { event.preventDefault(); onConvert({ ...form, modelNumber: optional(form.modelNumber), description: optional(form.description), manufacturerPartNumber: optional(form.manufacturerPartNumber) }); }}><div className="form-grid two-columns"><label>Product name<input required value={form.productName} onChange={(event) => update('productName', event.target.value)} /></label><label>Category<select required value={form.categoryId} onChange={(event) => update('categoryId', event.target.value)}><option value="">Choose category</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Variant name<input required value={form.variantName} onChange={(event) => update('variantName', event.target.value)} /></label><label>SKU code<input required value={form.skuCode} onChange={(event) => update('skuCode', event.target.value.toUpperCase())} /></label><label>Model number<input value={form.modelNumber} onChange={(event) => update('modelNumber', event.target.value)} /></label><label className="checkbox-field"><input type="checkbox" checked={form.serialTrackingEnabled} onChange={(event) => update('serialTrackingEnabled', event.target.checked)} />Enable serial tracking foundation</label></div><button className="primary-button">Create Draft Product / Variant / SKU</button></form></section>;
 }
 
-function DecisionTab({ candidate, categories, onStatus, onRequestSample, onApprove, onConvert }) {
+function SupplierContinuityPanel({ candidate, onPromote }) {
+  return <section className="workspace-card"><div className="detail-card-heading"><div><p className="eyebrow">Explicit purchasing continuity</p><h2>Set up suppliers for the draft SKU</h2></div><span>No PO or inventory created</span></div>
+    <p className="form-note">Each research supplier stays a lead until you explicitly reuse or create a purchasing supplier and link it to SKU {candidate.converted_sku_id}.</p>
+    <div className="continuity-list">{candidate.suppliers.map((option) => {
+      const match = option.identity_matches?.[0];
+      return <article key={option.id}><div><strong>{option.supplier_name || option.lead_name}</strong><small>{money(option.quoted_unit_cost, option.currency)} · MOQ {Number(option.moq)} · quote {option.quote_date || 'date not recorded'}</small></div>
+        {match && <p className="match-warning">Exact normalized match found: <strong>{match.name}</strong>. Nothing was merged automatically.</p>}
+        <div className="compact-actions">
+          {(option.supplier_id || match) && <button className="primary-button" onClick={() => onPromote(option.id, { action: 'use_existing', supplierId: option.supplier_id || match.id, linkToConvertedSku: true, preferred: option.preferred })}>Use existing + link SKU</button>}
+          {!option.supplier_id && !match && <button className="primary-button" onClick={() => onPromote(option.id, { action: 'create_supplier', linkToConvertedSku: true, preferred: option.preferred })}>Create supplier + link SKU</button>}
+          {!option.supplier_id && <button className="secondary-button" onClick={() => onPromote(option.id, { action: 'keep_lead', linkToConvertedSku: false, preferred: false })}>Keep as research lead</button>}
+        </div>
+      </article>;
+    })}</div>
+  </section>;
+}
+
+function DecisionTab({ candidate, categories, onStatus, onRequestSample, onApprove, onConvert, onPromote }) {
   const latestEconomics = candidate.economics[0];
   const latestEvaluation = candidate.evaluations[0];
   const latestSample = candidate.samples[0];
@@ -124,7 +145,7 @@ function DecisionTab({ candidate, categories, onStatus, onRequestSample, onAppro
       {candidate.status === 'sampling' && <button className="primary-button" disabled={!canApprove} onClick={() => onApprove(decision)}>Approve for Launch</button>}
     </div>{candidate.status === 'sampling' && !canApprove && <p className="form-note">To approve: save economics, pass a sample, and add a short rationale.</p>}</section>}
     {candidate.status === 'approved' && <ConversionForm candidate={candidate} categories={categories} onConvert={onConvert} />}
-    {candidate.status === 'launched' && <section className="conversion-panel"><div><p className="eyebrow">Converted</p><h2>Draft SKU created</h2><p>The complete research history remains linked and conversion cannot be repeated.</p></div><a className="primary-button" href={'#products/' + candidate.catalog_product_id}>Open draft product</a></section>}
+    {candidate.status === 'launched' && <><section className="conversion-panel"><div><p className="eyebrow">Converted</p><h2>Draft SKU created</h2><p>The complete research history remains linked and conversion cannot be repeated. No supplier, purchase order, or inventory was created automatically.</p></div><a className="primary-button" href={'#products/' + candidate.catalog_product_id}>Open draft product</a></section><SupplierContinuityPanel candidate={candidate} onPromote={onPromote} /></>}
   </div>;
 }
 
@@ -209,13 +230,32 @@ export default function ResearchCandidateDetailPage({ organizationId, candidateI
     }, 'Candidate approved. Review the explicit draft SKU conversion below.');
   }
 
+  async function saveObservation(body, imageUrls = []) {
+    setError(null); setNotice(null);
+    try {
+      const snapshot = await researchApi.createSnapshot(organizationId, candidateId, body);
+      let message = 'Marketplace observation added.';
+      if (imageUrls.length > 0) {
+        const imported = await imageApi.importNoon(organizationId, {
+          entityType: 'marketplace_observation', entityId: snapshot.data.id,
+          urls: imageUrls, primaryUrl: body.mainImageUrl,
+        });
+        message += ' ' + imported.data.imported.length + ' images imported.';
+        if (imported.data.errors.length) message += ' ' + imported.data.errors.length + ' image imports could not be completed.';
+      }
+      setNotice(message);
+      await load();
+      return snapshot;
+    } catch (requestError) { setError(requestError); return null; }
+  }
+
   const tabContent = {
-    Overview: <OverviewTab candidate={candidate} categories={categories} onSave={(body) => action(() => researchApi.patchCandidate(organizationId, candidateId, body), 'Overview saved.')} />,
-    Suppliers: <SuppliersTab candidate={candidate} suppliers={suppliers} onAdd={(body) => action(() => researchApi.createSupplierOption(organizationId, candidateId, body), 'Supplier quote added.')} onChoose={(id) => action(() => researchApi.patchSupplierOption(organizationId, id, { preferred: true }), 'Best supplier selected.')} />,
-    Marketplace: <MarketplaceWorkspace candidate={candidate} onAddObservation={(body) => action(() => researchApi.createSnapshot(organizationId, candidateId, body), 'Marketplace observation added.')} onSavePlannedPrice={(body) => action(() => researchApi.patchCandidate(organizationId, candidateId, body), 'Planned selling price saved.')} />,
+    Overview: <OverviewTab organizationId={organizationId} candidate={candidate} categories={categories} onSave={(body) => action(() => researchApi.patchCandidate(organizationId, candidateId, body), 'Overview saved.')} />,
+    Suppliers: <SuppliersTab organizationId={organizationId} candidate={candidate} suppliers={suppliers} onAdd={(body) => action(() => researchApi.createSupplierOption(organizationId, candidateId, body), 'Supplier quote added.')} onChoose={(id) => action(() => researchApi.patchSupplierOption(organizationId, id, { preferred: true }), 'Best supplier selected.')} />,
+    Marketplace: <MarketplaceWorkspace organizationId={organizationId} candidate={candidate} onAnalyze={async (url) => (await researchApi.analyzeNoon(organizationId, url)).data} onAddObservation={saveObservation} onSavePlannedPrice={(body) => action(() => researchApi.patchCandidate(organizationId, candidateId, body), 'Planned selling price saved.')} />,
     Economics: <EconomicsTab candidate={candidate} onCalculate={async (body) => { const result = await action(() => researchApi.calculateEconomics(organizationId, candidateId, body), 'Economics recalculated from the selected supplier and planned price.'); if (!result) throw new Error('Economics could not be calculated.'); return result.data; }} />,
-    Samples: <SamplesTab candidate={candidate} onAdd={(body) => action(() => researchApi.createSample(organizationId, candidateId, body), 'Sample saved.')} onMove={(id, state) => action(() => researchApi.patchSample(organizationId, id, { workflowState: state }), 'Sample state updated.')} />,
-    Decision: <DecisionTab candidate={candidate} categories={categories} onStatus={(status) => action(() => researchApi.patchCandidate(organizationId, candidateId, { status }), 'Candidate status updated.')} onRequestSample={requestSample} onApprove={approve} onConvert={(body) => action(() => researchApi.createProduct(organizationId, candidateId, body), 'Draft Product, Variant, and SKU created.')} />,
+    Samples: <SamplesTab organizationId={organizationId} candidate={candidate} onAdd={(body) => action(() => researchApi.createSample(organizationId, candidateId, body), 'Sample saved.')} onMove={(id, state) => action(() => researchApi.patchSample(organizationId, id, { workflowState: state }), 'Sample state updated.')} />,
+    Decision: <DecisionTab candidate={candidate} categories={categories} onStatus={(status) => action(() => researchApi.patchCandidate(organizationId, candidateId, { status }), 'Candidate status updated.')} onRequestSample={requestSample} onApprove={approve} onConvert={(body) => action(() => researchApi.createProduct(organizationId, candidateId, body), 'Draft Product, Variant, and SKU created.')} onPromote={(id, body) => action(() => researchApi.promoteSupplierOption(organizationId, id, body), body.action === 'keep_lead' ? 'Supplier kept as a research lead.' : 'Supplier explicitly linked to the draft SKU. No PO or inventory was created.')} />,
   };
 
   return <>

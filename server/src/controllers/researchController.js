@@ -33,6 +33,11 @@ export async function patchCandidate(request, response) {
   response.json({ data: result });
 }
 
+export async function analyzeNoon(request, response) {
+  const result = await researchService.analyzeNoon(request.validated.body.url);
+  response.json({ data: result });
+}
+
 export async function createSnapshot(request, response) {
   const result = await researchService.createSnapshot(
     request.organizationId, request.validated.params.id,
@@ -58,6 +63,13 @@ export async function createSupplier(request, response) {
 export async function patchSupplier(request, response) {
   const result = await researchService.patchSupplierOption(
     request.organizationId, request.validated.params.id, request.validated.body,
+  );
+  response.json({ data: result });
+}
+
+export async function promoteSupplier(request, response) {
+  const result = await researchService.promoteSupplierOption(
+    request.organizationId, request.validated.params.id, request.user.id, request.validated.body,
   );
   response.json({ data: result });
 }

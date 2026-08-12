@@ -194,7 +194,9 @@ Candidate → market and supplier evidence → sample → unit economics → lau
 Approved candidate → explicit reviewed transaction → draft Product + Variant + SKU
 ```
 
-The Product Research navigation now opens a focused Task 6 workspace with fast search/filters, mobile Quick Capture, a seven-stage workflow indicator, and candidate tabs for Overview, Suppliers, Marketplace, Economics, Samples, and Decision. Supplier quantity tiers do not require repeated input when prices are identical; manual Noon observations remain distinct from the planned selling price. Monetary calculations still use Task 5 PostgreSQL `NUMERIC` logic. Conversion never creates stock, a supplier-product relationship, or a purchase order.
+The Product Research navigation now opens a focused Task 6/6.1 workspace with fast search/filters, photo-based Quick Capture, a seven-stage workflow indicator, and candidate tabs for Overview, Suppliers, Marketplace, Economics, Samples, and Decision. A user can analyze a public Noon product URL, review field provenance, edit the preview, and then explicitly save an observation and selected local image copies. Observed prices remain distinct from the planned selling price. Monetary calculations still use Task 5 PostgreSQL `NUMERIC` logic.
+
+Catalog conversion still creates no stock, supplier relationship, or purchase order. After conversion, a separate explicit action can reuse or create a purchasing supplier and link it to the draft SKU. New purchase orders offer a product-first flow with explainable linked-supplier recommendations; the supplier-first form remains available.
 
 See [`docs/product-research.md`](docs/product-research.md) for formulas, status transitions, tables, permissions, API routes, comparison rules, capital allocation, and conversion behavior.
 

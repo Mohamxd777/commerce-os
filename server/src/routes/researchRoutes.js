@@ -8,9 +8,9 @@ import {
   candidateCreateSchema, candidateListSchema, candidatePatchSchema,
   comparisonSchema, createProductFromCandidateSchema, economicsCreateSchema,
   evaluationCreateSchema, evidenceCreateSchema, feeAssumptionCreateSchema,
-  quickCaptureCreateSchema, researchIdSchema, researchSummarySchema, sampleCreateSchema, samplePatchSchema,
+  noonAnalyzeSchema, quickCaptureCreateSchema, researchIdSchema, researchSummarySchema, sampleCreateSchema, samplePatchSchema,
   settingsPatchSchema, snapshotCreateSchema, supplierOptionCreateSchema,
-  supplierOptionPatchSchema,
+  supplierOptionPatchSchema, supplierPromotionSchema,
 } from '../validators/researchValidators.js';
 
 export const researchRouter = Router();
@@ -22,11 +22,13 @@ researchRouter.post('/research/candidates', authorize('research.manage'), valida
 researchRouter.post('/research/quick-capture', authorize('research.manage'), validate(quickCaptureCreateSchema), asyncHandler(researchController.quickCapture));
 researchRouter.get('/research/candidates/:id', authorize('research.read'), validate(researchIdSchema), asyncHandler(researchController.getCandidate));
 researchRouter.patch('/research/candidates/:id', authorize('research.manage'), validate(candidatePatchSchema), asyncHandler(researchController.patchCandidate));
+researchRouter.post('/research/noon/analyze', authorize('research.manage'), validate(noonAnalyzeSchema), asyncHandler(researchController.analyzeNoon));
 
 researchRouter.post('/research/candidates/:id/snapshots', authorize('research.manage'), validate(snapshotCreateSchema), asyncHandler(researchController.createSnapshot));
 researchRouter.get('/research/candidates/:id/suppliers', authorize('research.read'), validate(researchIdSchema), asyncHandler(researchController.listSuppliers));
 researchRouter.post('/research/candidates/:id/suppliers', authorize('research.manage'), validate(supplierOptionCreateSchema), asyncHandler(researchController.createSupplier));
 researchRouter.patch('/research/supplier-options/:id', authorize('research.manage'), validate(supplierOptionPatchSchema), asyncHandler(researchController.patchSupplier));
+researchRouter.post('/research/supplier-options/:id/promote', authorize('research.manage'), authorize('purchasing.manage'), validate(supplierPromotionSchema), asyncHandler(researchController.promoteSupplier));
 researchRouter.get('/research/candidates/:id/samples', authorize('research.read'), validate(researchIdSchema), asyncHandler(researchController.listSamples));
 researchRouter.post('/research/candidates/:id/samples', authorize('research.manage'), validate(sampleCreateSchema), asyncHandler(researchController.createSample));
 researchRouter.patch('/research/samples/:id', authorize('research.manage'), validate(samplePatchSchema), asyncHandler(researchController.patchSample));

@@ -133,6 +133,12 @@ Supplier, supplier-product, PO, receipt, and comparison lists are server-paginat
 - POs: PO number, supplier, status, order date, and expected-delivery ranges.
 - Receipts: receipt number, PO, supplier, location, and date range.
 
+## Product-first purchase orders
+
+The new-PO screen defaults to SKU first: choose a SKU, review only its active linked suppliers, explicitly select one, enter quantity, review the summary, and explicitly create the draft PO. The original supplier-first multi-line form remains available and is still used to edit drafts.
+
+`GET /api/skus/:id/suppliers` returns transparent recommendation facts. Preference and a passed linked sample come first, followed by replacement/warranty evidence, MOQ, lead time, and cost. This intentionally may recommend a reliable supplier over the cheapest quote. Every option returns reasons, missing data, quote age, and an `is_recommended` flag; the user still selects the supplier. PO totals and historical line costs remain server-authoritative.
+
 ## API endpoints
 
 All endpoints require an authenticated session and `x-organization-id`.

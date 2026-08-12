@@ -8,6 +8,7 @@ export default function QuickCaptureForm({ suppliers = [], categories = [], onSu
     brandName: '', modelNumber: '', gtin: '', categoryId: '', moq: '1',
     warrantyText: '', invoiceAvailable: '', notes: '', photoReference: '',
   });
+  const [photoFile, setPhotoFile] = useState(null);
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -30,6 +31,7 @@ export default function QuickCaptureForm({ suppliers = [], categories = [], onSu
       invoiceAvailable: form.invoiceAvailable === '' ? null : form.invoiceAvailable === 'yes',
       notes: form.notes || null,
       photoReference: form.photoReference || null,
+      photoFile,
     });
   }
 
@@ -40,6 +42,7 @@ export default function QuickCaptureForm({ suppliers = [], categories = [], onSu
         <label>Supplier<select value={form.supplierId} onChange={(event) => update('supplierId', event.target.value)}><option value="">Enter a shop or contact name</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
         {!form.supplierId && <label>Supplier name<input required value={form.supplierName} onChange={(event) => update('supplierName', event.target.value)} placeholder="Shop or contact" /></label>}
         <label>Unit price<div className="input-pair"><input required type="number" min="0" step="0.0001" inputMode="decimal" value={form.unitPrice} onChange={(event) => update('unitPrice', event.target.value)} /><input aria-label="Currency" required pattern="[A-Za-z]{3}" value={form.currency} onChange={(event) => update('currency', event.target.value.toUpperCase())} /></div></label>
+        <label>Product photo<input required type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" capture="environment" onChange={(event) => setPhotoFile(event.target.files?.[0] || null)} /><small>PNG or JPEG. Stored in managed local app data.</small></label>
       </section>
 
       <details className="more-details">

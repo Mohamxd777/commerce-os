@@ -49,6 +49,10 @@ export const researchIdSchema = requestSchema({
   params: z.object({ id: uuid }).strict(),
 });
 
+export const noonAnalyzeSchema = requestSchema({
+  body: z.object({ url }).strict(),
+});
+
 export const candidateListSchema = requestSchema({
   query: z.object({
     ...pageQuery,
@@ -152,6 +156,14 @@ export const snapshotCreateSchema = requestSchema({
     recentSalesSignal: optionalText(240),
     bestsellerRankText: optionalText(240),
     fulfillmentBadge: optionalText(120),
+    canonicalUrl: url.nullable().optional(),
+    availability: optionalText(120),
+    keySpecifications: z.record(z.string().trim().min(1).max(200), z.string().trim().max(2000)).default({}),
+    modelNumber: optionalText(160),
+    gtin: z.string().trim().regex(/^\d{8,14}$/, 'Use an 8 to 14 digit GTIN/barcode.').nullable().optional(),
+    mainImageUrl: url.nullable().optional(),
+    analyzedAt: isoDateTime.nullable().optional(),
+    extractionMetadata: z.record(z.string(), z.unknown()).default({}),
   }).strict(),
 });
 
@@ -179,6 +191,8 @@ const supplierOptionFields = {
   defectiveUnitReplacement: z.boolean().nullable().optional(),
   invoiceAvailable: z.boolean().nullable().optional(),
   sampleAvailable: z.boolean().nullable().optional(),
+  contactPerson: optionalText(200),
+  phone: optionalText(80),
 };
 
 function validateSupplierOption(value, context) {
@@ -221,7 +235,23 @@ export const supplierOptionPatchSchema = requestSchema({
     defectiveUnitReplacement: supplierOptionFields.defectiveUnitReplacement,
     invoiceAvailable: supplierOptionFields.invoiceAvailable,
     sampleAvailable: supplierOptionFields.sampleAvailable,
+    contactPerson: supplierOptionFields.contactPerson,
+    phone: supplierOptionFields.phone,
   }).strict()),
+});
+
+export const supplierPromotionSchema = requestSchema({
+  params: z.object({ id: uuid }).strict(),
+  body: z.object({
+    action: z.enum(['use_existing', 'create_supplier', 'keep_lead']),
+    supplierId: uuid.optional(),
+    linkToConvertedSku: z.boolean().default(false),
+    preferred: z.boolean().default(false),
+  }).strict().superRefine((value, context) => {
+    if (value.action === 'use_existing' && !value.supplierId) {
+      context.addIssue({ code: 'custom', path: ['supplierId'], message: 'Choose the existing supplier to use.' });
+    }
+  }),
 });
 
 const checklistItem = z.object({

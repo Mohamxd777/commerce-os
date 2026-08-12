@@ -125,6 +125,11 @@ Comparison requires 2–10 explicitly selected candidate IDs and returns only ma
 | POST | `/api/research/candidates/:id/snapshots` | manage | Add market snapshot |
 | GET / POST | `/api/research/candidates/:id/suppliers` | read / manage | List/add supplier options |
 | PATCH | `/api/research/supplier-options/:id` | manage | Update supplier option |
+| POST | `/api/research/supplier-options/:id/promote` | research + purchasing manage | Explicitly keep lead, reuse/create supplier, and optionally link converted SKU |
+| POST | `/api/research/noon/analyze` | manage | Analyze one user-supplied public Noon URL without saving |
+| GET / POST | `/api/images`, `/api/images/upload` | read / manage | List or upload managed PNG/JPEG associations |
+| POST | `/api/images/import-noon` | manage | Import selected analyzer image URLs; per-image failures are returned without removing observations |
+| GET / PATCH / DELETE | `/api/images/:id/content`, `/api/images/:id/primary`, `/api/images/:id` | read / manage | Open, choose primary, or remove an association |
 | GET / POST | `/api/research/candidates/:id/samples` | read / manage | List/add samples |
 | PATCH | `/api/research/samples/:id` | manage | Update sample/checklist and enforce workflow state transitions |
 | POST | `/api/research/candidates/:id/fee-assumptions` | manage | Add effective fee evidence |
@@ -137,6 +142,14 @@ Comparison requires 2–10 explicitly selected candidate IDs and returns only ma
 | POST | `/api/research/candidates/:id/create-product` | evaluate | Transactional approved conversion |
 
 All routes require authentication and `x-organization-id`.
+
+## Task 6.1 link analysis and managed images
+
+Noon analysis is user-initiated and read-only. The server validates HTTP/HTTPS and a Noon hostname, rejects URL credentials, resolves DNS and blocks non-public addresses, revalidates every redirect, caps redirects/time/body size, requires HTML, sends an identifiable user agent, and never executes page scripts. Extraction precedence is exact and field-level: JSON-LD Product/Offer, parse-only embedded JSON state, Open Graph/product meta, semantic HTML, then scoped visible-text signals. Missing values remain `null`; the response reports each field as `extracted` or `not_found`, its source, warnings, and the extraction strategy. The UI preserves auto/user/not-found provenance in the saved observation metadata.
+
+PNG/JPEG binaries never enter PostgreSQL. `local_images` stores metadata and a safe relative path; `local_image_links` associates a file with a candidate, supplier option, sample, or marketplace observation. Files are signature/structure checked, size limited, assigned generated filenames, and resolved only beneath `LOCAL_DATA_DIR`, which should be outside the repository. Removing a link deletes the physical file only after the last association is gone. Noon image import uses the same public-DNS, redirect, type, and size controls and supports `noon.com`/`nooncdn.com` image hosts.
+
+Supplier identity matching normalizes Unicode, case, whitespace, and punctuation. Exact matches are shown but never silently merged. The promotion endpoint requires an explicit `keep_lead`, `use_existing`, or `create_supplier` action. Linking carries quote cost/currency, MOQ, lead time, warranty, replacement terms, quote date, research option, and best available sample reference into the existing SKU-supplier relationship. It never creates a PO, receipt, movement, or inventory balance.
 
 ## Running and testing
 

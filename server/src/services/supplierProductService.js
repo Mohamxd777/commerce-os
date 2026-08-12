@@ -197,6 +197,49 @@ export async function updateSupplierPrice(organizationId, id, input) {
   }
 }
 
+export function explainSupplierRecommendations(items, now = new Date()) {
+  if (!items.length) return [];
+  const minimumCost = Math.min(...items.map((item) => Number(item.current_unit_cost)));
+  const minimumMoq = Math.min(...items.map((item) => Number(item.moq)));
+  const minimumLead = Math.min(...items.map((item) => Number(item.lead_time_days)));
+  const ordered = [...items].sort((left, right) => {
+    const factors = [
+      Number(Boolean(right.preferred)) - Number(Boolean(left.preferred)),
+      Number(right.sample_state === 'passed') - Number(left.sample_state === 'passed'),
+      Number(Boolean(right.defective_unit_replacement)) - Number(Boolean(left.defective_unit_replacement)),
+      Number(Boolean(right.warranty_text)) - Number(Boolean(left.warranty_text)),
+      Number(left.moq) - Number(right.moq),
+      Number(left.lead_time_days) - Number(right.lead_time_days),
+      Number(left.current_unit_cost) - Number(right.current_unit_cost),
+    ];
+    return factors.find((value) => value !== 0) || left.supplier_name.localeCompare(right.supplier_name);
+  });
+  const recommendedId = ordered[0].id;
+  return items.map((item) => {
+    const reasons = [];
+    const missingData = [];
+    if (item.preferred) reasons.push('Marked preferred for this SKU');
+    if (item.sample_state === 'passed') reasons.push('Linked sample passed');
+    if (item.defective_unit_replacement) reasons.push('Defective-unit replacement recorded');
+    if (item.warranty_text) reasons.push('Warranty terms recorded'); else missingData.push('warranty');
+    if (Number(item.moq) === minimumMoq) reasons.push('Lowest MOQ in this comparison');
+    if (Number(item.lead_time_days) === minimumLead) reasons.push('Shortest recorded lead time');
+    if (Number(item.current_unit_cost) === minimumCost) reasons.push('Lowest current unit cost');
+    const freshnessValue = item.last_quote_date || item.last_price_update;
+    let quoteAgeDays = null;
+    if (freshnessValue) {
+      quoteAgeDays = Math.max(0, Math.floor((now.getTime() - new Date(freshnessValue).getTime()) / 86_400_000));
+      if (quoteAgeDays <= 90) reasons.push('Price evidence is ' + quoteAgeDays + ' days old');
+    } else missingData.push('quote freshness');
+    if (item.sample_state !== 'passed') missingData.push('passed sample');
+    return {
+      ...item, is_recommended: item.id === recommendedId,
+      recommendation_reasons: reasons, missing_recommendation_data: missingData,
+      quote_age_days: quoteAgeDays,
+    };
+  });
+}
+
 export async function compareSkuSuppliers(organizationId, skuId, query) {
   const sku = await supplierProductModel.findSku(pool, { organizationId, id: skuId });
   if (!sku) {
@@ -214,7 +257,7 @@ export async function compareSkuSuppliers(organizationId, skuId, query) {
   });
   return {
     sku,
-    items: result.rows,
+    items: explainSupplierRecommendations(result.rows),
     pagination: paginationMetadata(result.total, query.page, query.limit),
   };
 }
